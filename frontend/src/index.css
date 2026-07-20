@@ -1,0 +1,259 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+:root {
+  --ndm-page: #08090f;
+  --ndm-bar: #0c0e17;
+  --ndm-panel: #12141f;
+  --ndm-card: #161927;
+  --ndm-track: #1e2233;
+  --ndm-b1: #242840;
+  --ndm-b2: #2f3450;
+  --ndm-b3: #3d4468;
+  --ndm-t1: #f0f1f8;
+  --ndm-t1b: #c4c8de;
+  --ndm-t2: #8b90ac;
+  --ndm-t3: #585d78;
+  --ndm-accent: #c79a4b;
+  --ndm-accent-hov: #dbaf61;
+  --ndm-accent-txt: #e4c68a;
+  --ndm-accent-ink: #241905;
+  --ndm-pill-bg: #2a2110;
+
+  /* Semantic hues. Not tokenised in the mockup, but referenced by name often
+     enough that hardcoding them at call sites would be unmaintainable. */
+  --ndm-success: #3fce7c;
+  --ndm-chunk-done: #2e7a4f;
+  --ndm-danger: #f0524d;
+  --ndm-warning: #e8a33d;
+  --ndm-info: #58a6ff;
+  --ndm-options: #b18af8;
+  --ndm-crypto: #ff9866;
+
+  /* shadcn's semantic contract, aliased onto the ndm palette. This is what
+     makes stock `bg-background` / `border-border` / `ring-ring` render
+     correctly in every generated component without editing its file. */
+  --background: var(--ndm-page);
+  --foreground: var(--ndm-t1);
+  --card: var(--ndm-card);
+  --card-foreground: var(--ndm-t1);
+  --popover: var(--ndm-panel);
+  --popover-foreground: var(--ndm-t1);
+  --primary: var(--ndm-accent);
+  --primary-foreground: var(--ndm-accent-ink);
+  --secondary: var(--ndm-panel);
+  --secondary-foreground: var(--ndm-t1b);
+  --muted: var(--ndm-panel);
+  --muted-foreground: var(--ndm-t2);
+  --accent: var(--ndm-b1);
+  --accent-foreground: var(--ndm-t1);
+  --destructive: var(--ndm-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--ndm-b2);
+  --input: var(--ndm-b2);
+  --ring: color-mix(in srgb, var(--ndm-accent) 50%, transparent);
+  --radius: 7px;
+}
+
+@theme {
+  /* px, not rem: the 13px body font must never rescale spacing or type. */
+  --spacing: 4px;
+
+  /* The mockup's fractional sizes. Tailwind's default scale has no answer for
+     9.5px / 10.5px / 11.5px, and they recur constantly. */
+  --text-8: 8px;
+  --text-85: 8.5px;
+  --text-9: 9px;
+  --text-95: 9.5px;
+  --text-98: 9.8px;
+  --text-10: 10px;
+  --text-105: 10.5px;
+  --text-11: 11px;
+  --text-115: 11.5px;
+  --text-12: 12px;
+  --text-125: 12.5px;
+  --text-13: 13px;
+  --text-14: 14px;
+  --text-20: 20px;
+  --text-24: 24px;
+
+  --radius-3: 3px;
+  --radius-4: 4px;
+  --radius-5: 5px;
+  --radius-6: 6px;
+  --radius-7: 7px;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-13: 13px;
+
+  --animate-ndm-pulse: ndmPulse 1.6s ease-in-out infinite;
+  --animate-ndm-pulse-slow: ndmPulse 1.8s ease-in-out infinite;
+  --animate-ndm-cell: ndmCell 1.1s ease-in-out infinite;
+  --animate-ndm-toast: ndmToast 0.2s ease;
+  --animate-ndm-pop: ndmPop 0.18s ease;
+  --animate-ndm-fade: ndmFade 0.18s ease;
+}
+
+@theme inline {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, SFMono-Regular, monospace;
+
+  --color-page: var(--ndm-page);
+  --color-bar: var(--ndm-bar);
+  --color-panel: var(--ndm-panel);
+  --color-card: var(--ndm-card);
+  --color-track: var(--ndm-track);
+
+  --color-b1: var(--ndm-b1);
+  --color-b2: var(--ndm-b2);
+  --color-b3: var(--ndm-b3);
+
+  --color-t1: var(--ndm-t1);
+  --color-t1b: var(--ndm-t1b);
+  --color-t2: var(--ndm-t2);
+  --color-t3: var(--ndm-t3);
+
+  --color-accent: var(--ndm-accent);
+  --color-accent-hov: var(--ndm-accent-hov);
+  --color-accent-txt: var(--ndm-accent-txt);
+  --color-accent-ink: var(--ndm-accent-ink);
+  --color-pill: var(--ndm-pill-bg);
+
+  --color-success: var(--ndm-success);
+  --color-chunk-done: var(--ndm-chunk-done);
+  --color-danger: var(--ndm-danger);
+  --color-warning: var(--ndm-warning);
+  --color-info: var(--ndm-info);
+  --color-options: var(--ndm-options);
+  --color-crypto: var(--ndm-crypto);
+
+  /* The accent color-mix ladder as first-class utilities: `border-acc-40`,
+     `bg-acc-12`. The mockup uses exactly these eight steps, so enumerating is
+     complete and keeps inline styles out of components. */
+  --color-acc-10: color-mix(in srgb, var(--ndm-accent) 10%, transparent);
+  --color-acc-12: color-mix(in srgb, var(--ndm-accent) 12%, transparent);
+  --color-acc-14: color-mix(in srgb, var(--ndm-accent) 14%, transparent);
+  --color-acc-25: color-mix(in srgb, var(--ndm-accent) 25%, transparent);
+  --color-acc-30: color-mix(in srgb, var(--ndm-accent) 30%, transparent);
+  --color-acc-35: color-mix(in srgb, var(--ndm-accent) 35%, transparent);
+  --color-acc-40: color-mix(in srgb, var(--ndm-accent) 40%, transparent);
+  --color-acc-45: color-mix(in srgb, var(--ndm-accent) 45%, transparent);
+  --color-acc-50: color-mix(in srgb, var(--ndm-accent) 50%, transparent);
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* 13px on body, NOT html — moving the root size silently rescales every
+     remaining rem Tailwind emits. */
+  body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    min-width: 1280px;
+    overflow: hidden;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    background: var(--ndm-page);
+    color: var(--ndm-t1);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a {
+    color: var(--ndm-accent);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--ndm-accent-hov);
+    text-decoration: underline;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--ndm-accent) 30%, transparent);
+  }
+
+  input::placeholder {
+    color: var(--ndm-t3);
+  }
+
+  input[type='date'],
+  input[type='time'],
+  select {
+    color-scheme: dark;
+  }
+
+  *:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--ndm-accent) 50%, transparent);
+    outline-offset: 1px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  /* The 3px page-colored border fakes inset padding around the thumb. */
+  ::-webkit-scrollbar-thumb {
+    background: var(--ndm-b2);
+    border: 3px solid var(--ndm-page);
+    border-radius: 6px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--ndm-b3);
+  }
+}
+
+@keyframes ndmPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes ndmCell {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes ndmToast {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes ndmPop {
+  from {
+    transform: translateY(6px) scale(0.99);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes ndmFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

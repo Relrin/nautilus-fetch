@@ -1,4 +1,4 @@
-# nautilus-fetch
+# nautilus-dataset-fetch
 A self-hosted web app that helps to manage and download datasets via [IB Gateway](https://github.com/gnzsnz/ib-gateway-docker) 
 in order to use for backtests & running along with the [Nautilus Trader](https://nautilustrader.io).
 

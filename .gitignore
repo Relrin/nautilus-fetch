@@ -1,3 +1,6 @@
+.idea/
+.vscode/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -12,9 +15,12 @@ deploy-data/
 *.sqlite
 *.sqlite-*
 
-# Node (future frontend)
+# Node / frontend
 node_modules/
 frontend/dist/
+
+# `vite build` emits here; main.py mounts it as the production SPA
+backend/static/
 
 # Environment
 .env
