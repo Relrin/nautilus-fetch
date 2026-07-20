@@ -116,6 +116,26 @@ async def add_attempt(
         )
 
 
+async def last_range_end_by_con(
+    db: AsyncEngine, schedule_id: str, con_ids: list[int]
+) -> dict[int, int]:
+    """Per instrument: latest successfully fetched range end across a schedule's jobs."""
+    from nautilus_fetch.db.schema import jobs
+
+    async with db.connect() as conn:
+        result = await conn.execute(
+            sa.select(chunks.c.con_id, sa.func.max(chunks.c.range_end_ns))
+            .select_from(chunks.join(jobs, chunks.c.job_id == jobs.c.id))
+            .where(
+                jobs.c.schedule_id == schedule_id,
+                chunks.c.con_id.in_(con_ids),
+                chunks.c.state.in_(["done", "empty"]),
+            )
+            .group_by(chunks.c.con_id)
+        )
+        return {row[0]: int(row[1]) for row in result}
+
+
 async def max_seq(db: AsyncEngine, job_id: str) -> int:
     async with db.connect() as conn:
         result = await conn.execute(

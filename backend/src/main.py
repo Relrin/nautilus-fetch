@@ -6,10 +6,13 @@ from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
 from nautilus_fetch import __version__
+from nautilus_fetch.api.catalog import router as catalog_router
 from nautilus_fetch.api.instruments import router as instruments_router
 from nautilus_fetch.api.jobs import router as jobs_router
 from nautilus_fetch.api.routes import router
+from nautilus_fetch.api.schedules import router as schedules_router
 from nautilus_fetch.api.ws import WsHub
+from nautilus_fetch.scheduler import Scheduler
 from nautilus_fetch.config import Settings
 from nautilus_fetch.db.engine import create_db_engine
 from nautilus_fetch.db.migrate import run_migrations
@@ -70,8 +73,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             throughput=app.state.throughput,
         )
         await app.state.engine.start()
+        app.state.scheduler = Scheduler(app.state.db, app.state.engine)
+        await app.state.scheduler.start()
         logger.info("nautilus-fetch %s started", __version__)
         yield
+        await app.state.scheduler.stop()
         await app.state.engine.stop()
         await app.state.throughput.stop()
         await app.state.hub.stop()
@@ -82,6 +88,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(router)
     app.include_router(instruments_router)
     app.include_router(jobs_router)
+    app.include_router(schedules_router)
+    app.include_router(catalog_router)
 
     @app.websocket("/ws")
     async def ws_endpoint(websocket: WebSocket) -> None:

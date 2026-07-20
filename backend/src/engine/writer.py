@@ -16,10 +16,19 @@ import asyncio
 import logging
 from pathlib import Path
 
+from nautilus_trader.model.data import Bar, OrderBookDepth10, QuoteTick, TradeTick
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.persistence.catalog.parquet import ParquetDataCatalog
 
 logger = logging.getLogger(__name__)
+
+# catalog class-directory name -> data class (as written by this app)
+_DATA_CLASSES: dict[str, type] = {
+    "bar": Bar,
+    "trade_tick": TradeTick,
+    "quote_tick": QuoteTick,
+    "order_book_depth10": OrderBookDepth10,
+}
 
 
 class CatalogWriter:
@@ -67,6 +76,88 @@ class CatalogWriter:
             )
             self._catalog.write_data(objs, start=start, end=end)
         return max(0, self._identifier_size(identifier) - size_before)
+
+    async def summary(self) -> dict:
+        return await asyncio.to_thread(self._summary_sync)
+
+    def _summary_sync(self) -> dict:
+        data_dir = self._path / "data"
+        classes = []
+        total_bytes = 0
+        if data_dir.is_dir():
+            for class_dir in sorted(data_dir.iterdir()):
+                if not class_dir.is_dir():
+                    continue
+                identifiers = []
+                for ident_dir in sorted(class_dir.iterdir()):
+                    if not ident_dir.is_dir():
+                        continue
+                    files = sorted(ident_dir.glob("*.parquet"))
+                    if not files:
+                        continue
+                    size = sum(f.stat().st_size for f in files)
+                    total_bytes += size
+                    # filenames are "{startISO}_{endISO}.parquet": lexically sortable
+                    identifiers.append(
+                        {
+                            "identifier": ident_dir.name,
+                            "files": len(files),
+                            "bytes": size,
+                            "start": files[0].stem.split("_")[0],
+                            "end": files[-1].stem.split("_")[-1],
+                        }
+                    )
+                if identifiers:
+                    classes.append({"data_type": class_dir.name, "identifiers": identifiers})
+        return {"path": str(self._path), "total_bytes": total_bytes, "classes": classes}
+
+    async def consolidate(
+        self,
+        *,
+        data_type: str | None = None,
+        identifier: str | None = None,
+        ensure_contiguous_files: bool = False,
+        deduplicate: bool = False,
+    ) -> None:
+        """Merge the many small per-chunk files. Serialized with chunk writes."""
+        async with self._lock:
+            await asyncio.to_thread(
+                self._consolidate_sync, data_type, identifier, ensure_contiguous_files, deduplicate
+            )
+
+    def _consolidate_sync(
+        self,
+        data_type: str | None,
+        identifier: str | None,
+        ensure_contiguous_files: bool,
+        deduplicate: bool,
+    ) -> None:
+        if data_type is None:
+            self._catalog.consolidate_catalog(
+                ensure_contiguous_files=ensure_contiguous_files, deduplicate=deduplicate
+            )
+            return
+        data_cls = _DATA_CLASSES.get(data_type)
+        if data_cls is None:
+            raise ValueError(
+                f"Unknown data_type {data_type!r}; expected one of {sorted(_DATA_CLASSES)}"
+            )
+        if identifier is not None:
+            identifiers = [identifier]
+        else:  # consolidate_data(identifier=None) is a silent no-op: enumerate
+            class_dir = self._path / "data" / data_type
+            identifiers = (
+                [d.name for d in sorted(class_dir.iterdir()) if d.is_dir()]
+                if class_dir.is_dir()
+                else []
+            )
+        for ident in identifiers:
+            self._catalog.consolidate_data(
+                data_cls=data_cls,
+                identifier=ident,
+                ensure_contiguous_files=ensure_contiguous_files,
+                deduplicate=deduplicate,
+            )
 
     @staticmethod
     def _identifier_of(obj) -> str:

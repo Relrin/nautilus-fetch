@@ -37,6 +37,24 @@ def test_minute_bars_skip_weekends_for_stocks():
     )
 
 
+def test_weekend_chunk_covering_monday_is_kept():
+    spec = normalize_bar_size("M1")
+    # range anchored Sunday evening: the Sun 18:00 -> Mon 18:00 chunk covers
+    # Monday trading and must NOT be skipped
+    chunks, _ = plan_bars(
+        [AAPL],
+        spec,
+        datetime(2026, 6, 6, 18, 0, tzinfo=UTC),  # Sat evening
+        datetime(2026, 6, 8, 18, 0, tzinfo=UTC),  # Mon evening
+        now=NOW,
+        max_chunks=100,
+    )
+    # Sat 18:00 -> Sun 18:00 skipped (all weekend); Sun 18:00 -> Mon 18:00 kept
+    assert len(chunks) == 1
+    start = datetime.fromtimestamp(chunks[0].range_start_ns / 1e9, tz=UTC)
+    assert start == datetime(2026, 6, 7, 18, 0, tzinfo=UTC)
+
+
 def test_fx_keeps_weekend_chunks():
     spec = normalize_bar_size("M1")
     chunks, _ = plan_bars(

@@ -63,6 +63,55 @@ class JobCreateRequest(BaseModel):
         return self
 
 
+class ScheduleTemplate(BaseModel):
+    """What to fetch on each trigger; the range is computed incrementally."""
+
+    con_ids: list[int] = Field(min_length=1, max_length=200)
+    data_type: Literal["BARS", "TRADE_TICKS", "QUOTE_TICKS"] = "BARS"  # no DEPTH: recorders run continuously
+    bar_size: str | None = None
+    what_to_show: Literal["TRADES", "MIDPOINT", "BID", "ASK"] | None = None
+    use_rth: bool = True
+    workers: int | None = Field(default=None, ge=1, le=16)
+    max_retries: int = Field(default=3, ge=0, le=10)
+    lag_minutes: int = Field(default=15, ge=0, le=1440)  # stay behind now (data settles)
+    lookback_days: int = Field(default=7, ge=1, le=365)  # first run / new instruments
+
+    @model_validator(mode="after")
+    def check_bar_size(self) -> "ScheduleTemplate":
+        if self.data_type == "BARS" and not self.bar_size:
+            raise ValueError("bar_size is required for BARS templates")
+        return self
+
+
+class ScheduleCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    cron: str = Field(min_length=9, max_length=100)  # e.g. "30 2 * * 2-6"
+    template: ScheduleTemplate
+    enabled: bool = True
+    catchup: bool = False
+
+
+class ScheduleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    cron: str | None = Field(default=None, min_length=9, max_length=100)
+    template: ScheduleTemplate | None = None
+    enabled: bool | None = None
+    catchup: bool | None = None
+
+
+def schedule_dto(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "cron": row["cron"],
+        "enabled": bool(row["enabled"]),
+        "catchup": bool(row["catchup"]),
+        "template": json.loads(row["job_template_json"]),
+        "last_run_at": row["last_run_at"],
+        "next_run_at": row["next_run_at"],
+    }
+
+
 def _iso(ns: int | None) -> str | None:
     if ns is None:
         return None

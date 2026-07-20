@@ -89,6 +89,8 @@ class JobSpec:
     capture_from: datetime | None = None
     capture_until: datetime | None = None
     capture_window: dict | None = None
+    # set when a schedule instantiates the job
+    schedule_id: str | None = None
 
 
 @dataclass
@@ -254,6 +256,7 @@ class JobEngine:
             "max_retries": spec.max_retries,
             "range_start_ns": int(spec.range_start.timestamp() * _NS),
             "range_end_ns": int(spec.range_end.timestamp() * _NS),
+            "schedule_id": spec.schedule_id,
             "total_chunks": len(planned),
             "created_at": now_ms,
             "updated_at": now_ms,

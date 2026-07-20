@@ -35,11 +35,16 @@ def _to_ns(moment: datetime) -> int:
     return int(moment.timestamp() * _NS)
 
 
-def _skip_weekend(moment: datetime, sec_type: str, window: timedelta) -> bool:
-    # Cheap heuristic for sub-day windows on equities: whole-weekend chunks are
-    # guaranteed empty. FX/futures trade around the clock; anything else that
-    # slips through simply completes as an empty chunk.
-    return sec_type == "STK" and window <= timedelta(days=1) and moment.weekday() in (5, 6)
+def _skip_weekend(start: datetime, window_end: datetime, sec_type: str, window: timedelta) -> bool:
+    # Cheap heuristic for sub-day windows on equities: chunks lying ENTIRELY on
+    # Sat/Sun are guaranteed empty. Both endpoints must be weekend — ranges
+    # anchored at arbitrary times (incremental jobs) produce e.g. Sunday-evening
+    # chunks that cover Monday trading. FX/futures trade around the clock;
+    # anything that slips through simply completes as an empty chunk.
+    if sec_type != "STK" or window > timedelta(days=1):
+        return False
+    last_moment = window_end - timedelta(microseconds=1)
+    return start.weekday() in (5, 6) and last_moment.weekday() in (5, 6)
 
 
 @dataclass(frozen=True)
@@ -98,7 +103,7 @@ def _plan(
         cursor = start
         while cursor < range_end:
             window_end = min(cursor + window, range_end)
-            if not _skip_weekend(cursor, instrument.sec_type, window):
+            if not _skip_weekend(cursor, window_end, instrument.sec_type, window):
                 chunks.append(
                     PlannedChunk(
                         seq=seq,
