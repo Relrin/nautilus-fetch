@@ -2,19 +2,19 @@ import json
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 _NS = 1_000_000_000
 
 
 class JobCreateRequest(BaseModel):
     con_ids: list[int] = Field(min_length=1, max_length=200)
-    bar_size: str
     start: datetime
     end: datetime
+    data_type: Literal["BARS", "TRADE_TICKS", "QUOTE_TICKS"] = "BARS"
+    bar_size: str | None = None  # required when data_type == BARS
     name: str | None = Field(default=None, max_length=200)
-    data_type: Literal["BARS"] = "BARS"
-    what_to_show: Literal["TRADES", "MIDPOINT", "BID", "ASK"] | None = None
+    what_to_show: Literal["TRADES", "MIDPOINT", "BID", "ASK"] | None = None  # BARS only
     use_rth: bool = True
     workers: int | None = Field(default=None, ge=1, le=16)
     max_retries: int = Field(default=3, ge=0, le=10)
@@ -23,6 +23,14 @@ class JobCreateRequest(BaseModel):
     @classmethod
     def ensure_timezone(cls, value: datetime) -> datetime:
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+    @model_validator(mode="after")
+    def check_data_type_params(self) -> "JobCreateRequest":
+        if self.data_type == "BARS" and not self.bar_size:
+            raise ValueError("bar_size is required for BARS jobs")
+        if self.data_type != "BARS" and self.what_to_show is not None:
+            raise ValueError("what_to_show only applies to BARS jobs")
+        return self
 
 
 def _iso(ns: int | None) -> str | None:

@@ -1,5 +1,5 @@
-"""The catalog written by the engine must load in polars, via catalog.query, and
-run through a Nautilus BacktestEngine — proving training pipelines and backtests
+﻿"""The catalog written by the engine must load in polars, via catalog.query, and
+run through a Nautilus BacktestEngine - proving training pipelines and backtests
 can both consume the output.
 """
 
@@ -15,7 +15,7 @@ from nautilus_fetch.config import Settings
 from nautilus_fetch.db.engine import create_db_engine
 from nautilus_fetch.db.migrate import run_migrations
 from nautilus_fetch.db.repos import jobs as jobs_repo
-from nautilus_fetch.engine.engine import BarsJobSpec, JobEngine
+from nautilus_fetch.engine.engine import JobSpec, JobEngine
 from nautilus_fetch.engine.writer import CatalogWriter
 from nautilus_fetch.ib.search import InstrumentSearchService
 from nautilus_fetch.pacing import PacingGate
@@ -41,8 +41,8 @@ async def completed_job(tmp_path):
         search=InstrumentSearchService(FakeConn(fake), db, search_min_interval_s=0.0),
         settings=settings,
     )
-    job, _ = await engine.submit_bars(
-        BarsJobSpec(
+    job, _ = await engine.submit(
+        JobSpec(
             con_ids=[265598],
             bar_size="M1",
             range_start=datetime(2026, 6, 1, tzinfo=UTC),

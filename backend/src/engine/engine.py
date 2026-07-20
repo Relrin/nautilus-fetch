@@ -12,8 +12,8 @@ import json
 import logging
 import random
 import time
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from ib_async import RequestError
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -32,10 +32,19 @@ from nautilus_fetch.engine.convert import (
     InstrumentConversionError,
     bars_to_nautilus,
     chunk_end_datetime,
+    chunk_start_datetime,
     contract_from_row,
     instrument_from_row,
+    quote_ticks_to_nautilus,
+    trade_ticks_to_nautilus,
 )
-from nautilus_fetch.engine.planner import InstrumentPlanInput, PlanningError, plan_bars
+from nautilus_fetch.engine.planner import (
+    InstrumentPlanInput,
+    PlanningError,
+    plan_bars,
+    plan_ticks,
+)
+from nautilus_fetch.engine.throughput import NullThroughput, ThroughputTracker
 from nautilus_fetch.engine.writer import CatalogWriter
 from nautilus_fetch.ib.connection import IBConnectionManager
 from nautilus_fetch.ib.errors import HINTS, ErrorClass, classify
@@ -45,6 +54,8 @@ from nautilus_fetch.pacing import PacingGate
 logger = logging.getLogger(__name__)
 
 _NS = 1_000_000_000
+
+DATA_TYPES = ("BARS", "TRADE_TICKS", "QUOTE_TICKS")
 
 
 class JobValidationError(ValueError):
@@ -56,13 +67,14 @@ class JobNotFoundError(LookupError):
 
 
 @dataclass(frozen=True)
-class BarsJobSpec:
+class JobSpec:
     con_ids: list[int]
-    bar_size: str
     range_start: datetime
     range_end: datetime
+    data_type: str = "BARS"
+    bar_size: str | None = None  # required for BARS
     name: str | None = None
-    what_to_show: str | None = None  # None -> per-instrument default
+    what_to_show: str | None = None  # BARS only; None -> per-instrument default
     use_rth: bool = True
     workers: int | None = None
     max_retries: int = 3
@@ -76,11 +88,19 @@ class _InstrumentCtx:
     contract: object
     instrument: Instrument
     what_to_show: str
-    bar_type: BarType
+    bar_type: BarType | None = None  # BARS only
 
 
 def _default_what_to_show(sec_type: str) -> str:
     return "MIDPOINT" if sec_type == "CASH" else "TRADES"
+
+
+def _what_to_show_for(spec_data_type: str, user_choice: str | None, sec_type: str) -> str:
+    if spec_data_type == "TRADE_TICKS":
+        return "TRADES"
+    if spec_data_type == "QUOTE_TICKS":
+        return "BID_ASK"
+    return user_choice or _default_what_to_show(sec_type)
 
 
 def _now_ms() -> int:
@@ -98,6 +118,7 @@ class JobEngine:
         search: InstrumentSearchService,
         settings: Settings,
         hub: NullHub | None = None,
+        throughput: ThroughputTracker | None = None,
     ) -> None:
         self._db = db
         self._conn = conn
@@ -106,6 +127,7 @@ class JobEngine:
         self._search = search
         self._settings = settings
         self._hub = hub or NullHub()
+        self._tp = throughput or NullThroughput()
         self._runners: dict[str, _JobRunner] = {}
 
     async def start(self) -> None:
@@ -123,11 +145,17 @@ class JobEngine:
 
     # -- job lifecycle -------------------------------------------------------
 
-    async def submit_bars(self, spec: BarsJobSpec) -> tuple[dict, list[str]]:
-        try:
-            bar_spec = normalize_bar_size(spec.bar_size)
-        except ValueError as exc:
-            raise JobValidationError(str(exc)) from exc
+    async def submit(self, spec: JobSpec) -> tuple[dict, list[str]]:
+        if spec.data_type not in DATA_TYPES:
+            raise JobValidationError(f"Unsupported data_type {spec.data_type!r}")
+        bar_spec: BarSpec | None = None
+        if spec.data_type == "BARS":
+            if not spec.bar_size:
+                raise JobValidationError("bar_size is required for BARS jobs")
+            try:
+                bar_spec = normalize_bar_size(spec.bar_size)
+            except ValueError as exc:
+                raise JobValidationError(str(exc)) from exc
 
         contexts: list[_InstrumentCtx] = []
         for con_id in dict.fromkeys(spec.con_ids):  # dedupe, keep order
@@ -136,7 +164,7 @@ class JobEngine:
                 instrument = instrument_from_row(row)
             except InstrumentConversionError as exc:
                 raise JobValidationError(str(exc)) from exc
-            what_to_show = spec.what_to_show or _default_what_to_show(row["sec_type"])
+            what_to_show = _what_to_show_for(spec.data_type, spec.what_to_show, row["sec_type"])
             contexts.append(
                 _InstrumentCtx(
                     con_id=con_id,
@@ -147,7 +175,9 @@ class JobEngine:
                     what_to_show=what_to_show,
                     bar_type=BarType.from_str(
                         bar_type_name(row["instrument_id"], bar_spec, what_to_show)
-                    ),
+                    )
+                    if bar_spec is not None
+                    else None,
                 )
             )
 
@@ -162,32 +192,48 @@ class JobEngine:
             for ctx in contexts
         ]
         try:
-            planned, warnings = plan_bars(
-                plan_inputs,
-                bar_spec,
-                spec.range_start,
-                spec.range_end,
-                now=datetime.now(UTC),
-                max_chunks=self._settings.max_chunks_per_job,
-            )
+            if bar_spec is not None:
+                planned, warnings = plan_bars(
+                    plan_inputs,
+                    bar_spec,
+                    spec.range_start,
+                    spec.range_end,
+                    now=datetime.now(UTC),
+                    max_chunks=self._settings.max_chunks_per_job,
+                )
+            else:
+                planned, warnings = plan_ticks(
+                    plan_inputs,
+                    spec.range_start,
+                    spec.range_end,
+                    now=datetime.now(UTC),
+                    max_chunks=self._settings.max_chunks_per_job,
+                    stk_window=timedelta(hours=self._settings.tick_chunk_stk_hours),
+                    fx_window=timedelta(hours=self._settings.tick_chunk_fx_hours),
+                )
         except PlanningError as exc:
             raise JobValidationError(str(exc)) from exc
+
+        if bar_spec is not None:
+            params = {
+                "bar_size": bar_spec.ib_size,
+                "what_to_show": spec.what_to_show,
+                "use_rth": spec.use_rth,
+            }
+            default_name = f"{bar_spec.ib_size} bars x{len(contexts)}"
+        else:
+            params = {"use_rth": spec.use_rth}
+            default_name = f"{spec.data_type.lower()} x{len(contexts)}"
 
         job_id = str(ULID())
         workers = min(spec.workers or self._settings.default_workers, self._settings.max_workers)
         now_ms = _now_ms()
         job_row = {
             "id": job_id,
-            "name": spec.name or f"{bar_spec.ib_size} bars x{len(contexts)}",
+            "name": spec.name or default_name,
             "state": "queued",
-            "data_type": "BARS",
-            "params_json": json.dumps(
-                {
-                    "bar_size": bar_spec.ib_size,
-                    "what_to_show": spec.what_to_show,
-                    "use_rth": spec.use_rth,
-                }
-            ),
+            "data_type": spec.data_type,
+            "params_json": json.dumps(params),
             "workers": workers,
             "max_retries": spec.max_retries,
             "range_start_ns": int(spec.range_start.timestamp() * _NS),
@@ -327,10 +373,11 @@ class _JobRunner:
         self._hub = engine._hub
         self._job = job
         self._job_id = job["id"]
+        self._data_type = job["data_type"]
         self._params = json.loads(job["params_json"])
         self._max_retries = job["max_retries"]
         self._contexts: dict[int, _InstrumentCtx] = {}
-        self._spec: BarSpec | None = None
+        self._spec: BarSpec | None = None  # BARS only
 
         self._queue: asyncio.Queue[int] = asyncio.Queue()
         self._outstanding = 0
@@ -367,6 +414,7 @@ class _JobRunner:
         await jobs_repo.update(self._db, self._job_id, **updates)
         self._hub.emit_job(self._job_id, {"state": updates["state"]})
 
+        self._engine._tp.register(self._job_id)
         worker_count = min(self._job["workers"], self._settings.max_workers)
         self._workers = [
             asyncio.create_task(self._worker(), name=f"job-{self._job_id}-w{i}")
@@ -420,7 +468,8 @@ class _JobRunner:
     # -- execution -----------------------------------------------------------
 
     async def _prepare(self) -> None:
-        self._spec = normalize_bar_size(self._params["bar_size"])
+        if self._data_type == "BARS":
+            self._spec = normalize_bar_size(self._params["bar_size"])
         for symbol in await jobs_repo.symbols_of(self._db, self._job_id):
             row = await instruments_repo.get(self._db, symbol["con_id"])
             if row is None:
@@ -428,7 +477,9 @@ class _JobRunner:
                     f"Instrument conId={symbol['con_id']} missing from cache for job {self._job_id}"
                 )
             instrument = instrument_from_row(row)
-            what_to_show = self._params.get("what_to_show") or _default_what_to_show(row["sec_type"])
+            what_to_show = _what_to_show_for(
+                self._data_type, self._params.get("what_to_show"), row["sec_type"]
+            )
             ctx = _InstrumentCtx(
                 con_id=symbol["con_id"],
                 instrument_id=row["instrument_id"],
@@ -438,7 +489,9 @@ class _JobRunner:
                 what_to_show=what_to_show,
                 bar_type=BarType.from_str(
                     bar_type_name(row["instrument_id"], self._spec, what_to_show)
-                ),
+                )
+                if self._spec is not None
+                else None,
             )
             self._contexts[ctx.con_id] = ctx
             await self._engine._writer.ensure_instrument(instrument)
@@ -457,6 +510,7 @@ class _JobRunner:
         state = "completed_with_failures" if self._counters["failed_chunks"] > 0 else "completed"
         await jobs_repo.update(self._db, self._job_id, state=state, finished_at=_now_ms())
         self._hub.emit_job(self._job_id, {"state": state, **self._counters})
+        self._engine._tp.unregister(self._job_id)
         self._engine._runner_finished(self._job_id)
         logger.info("Job %s finished: %s (%s)", self._job_id, state, self._counters)
 
@@ -481,64 +535,37 @@ class _JobRunner:
         if chunk is None or chunk["state"] not in ("pending", "active"):
             return
         ctx = self._contexts[chunk["con_id"]]
-        spec = self._spec
 
         await self._running.wait()
         await self._engine._conn.ready()
-        identical_key = (
-            "bars",
-            ctx.con_id,
-            chunk["range_end_ns"],
-            spec.duration,
-            spec.ib_size,
-            ctx.what_to_show,
-        )
-        contract_key = (ctx.con_id, getattr(ctx.contract, "exchange", ""), ctx.what_to_show)
-        await self._engine._pacing.acquire(
-            cost=1, identical_key=identical_key, contract_key=contract_key
-        )
-
         await chunks_repo.mark_active(self._db, chunk_id)
         self._hub.emit_chunk(self._job_id, chunk["seq"], "active")
 
+        gap = False
+        self._engine._tp.track_inflight(self._job_id, +1)
         try:
-            ib_bars = await self._engine._conn.ib.reqHistoricalDataAsync(
-                ctx.contract,
-                endDateTime=chunk_end_datetime(chunk["range_end_ns"]),
-                durationStr=spec.duration,
-                barSizeSetting=spec.ib_size,
-                whatToShow=ctx.what_to_show,
-                useRTH=bool(self._params.get("use_rth", True)),
-                formatDate=2,
-                timeout=self._settings.ib_request_timeout_s,
-            )
+            if self._data_type == "BARS":
+                raw = await self._fetch_bars(chunk, ctx)
+            else:
+                raw, gap = await self._fetch_ticks(chunk, ctx)
         except RequestError as exc:
             await self._on_error(chunk, classify(exc.code, exc.message), exc.code, exc.message)
             return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            await self._on_error(
-                chunk, ErrorClass.TRANSIENT, None, f"{type(exc).__name__}: {exc}"
-            )
+            await self._on_error(chunk, ErrorClass.TRANSIENT, None, f"{type(exc).__name__}: {exc}")
             return
+        finally:
+            self._engine._tp.track_inflight(self._job_id, -1)
 
         try:
-            objs = bars_to_nautilus(
-                list(ib_bars or []),
-                instrument=ctx.instrument,
-                bar_type=ctx.bar_type,
-                spec=spec,
-                range_start_ns=chunk["range_start_ns"],
-                range_end_ns=chunk["range_end_ns"],
-            )
+            objs, label_start, label_end = self._convert(raw, chunk, ctx)
             if not objs:
-                await self._terminal(chunk, "empty", rows=0, bytes_=0)
+                await self._terminal(chunk, "empty", rows=0, bytes_=0, gap_warning=gap)
                 return
             bytes_ = await self._engine._writer.write_chunk(
-                objs,
-                range_start_ns=chunk["range_start_ns"],
-                range_end_ns=chunk["range_end_ns"],
+                objs, label_start_ns=label_start, label_end_ns=label_end
             )
         except asyncio.CancelledError:
             raise
@@ -547,7 +574,119 @@ class _JobRunner:
                 chunk, ErrorClass.TRANSIENT, None, f"convert/write: {type(exc).__name__}: {exc}"
             )
             return
-        await self._terminal(chunk, "done", rows=len(objs), bytes_=bytes_)
+        await self._terminal(chunk, "done", rows=len(objs), bytes_=bytes_, gap_warning=gap)
+
+    async def _fetch_bars(self, chunk: dict, ctx: _InstrumentCtx) -> list:
+        spec = self._spec
+        identical_key = (
+            "bars",
+            ctx.con_id,
+            chunk["range_end_ns"],
+            spec.duration,
+            spec.ib_size,
+            ctx.what_to_show,
+        )
+        await self._engine._pacing.acquire(
+            cost=1,
+            identical_key=identical_key,
+            contract_key=(ctx.con_id, getattr(ctx.contract, "exchange", ""), ctx.what_to_show),
+        )
+        ib_bars = await self._engine._conn.ib.reqHistoricalDataAsync(
+            ctx.contract,
+            endDateTime=chunk_end_datetime(chunk["range_end_ns"]),
+            durationStr=spec.duration,
+            barSizeSetting=spec.ib_size,
+            whatToShow=ctx.what_to_show,
+            useRTH=bool(self._params.get("use_rth", True)),
+            formatDate=2,
+            timeout=self._settings.ib_request_timeout_s,
+        )
+        return list(ib_bars or [])
+
+    async def _fetch_ticks(self, chunk: dict, ctx: _InstrumentCtx) -> tuple[list, bool]:
+        """Cursor through reqHistoricalTicks pages (max 1000 ticks each).
+
+        IB tick times have second resolution: consecutive pages overlap at the
+        boundary second (startDateTime is inclusive), deduped positionally. If a
+        full page shares one identical second, ticks beyond the first 1000 of
+        that second are unreachable — skip ahead one second and flag the gap.
+        """
+        end_s = chunk["range_end_ns"] // _NS
+        cursor_s = chunk["range_start_ns"] // _NS
+        cost = 2 if ctx.what_to_show == "BID_ASK" else 1
+        contract_key = (ctx.con_id, getattr(ctx.contract, "exchange", ""), ctx.what_to_show)
+        raw: list = []
+        gap = False
+
+        while True:
+            await self._running.wait()
+            await self._engine._conn.ready()
+            await self._engine._pacing.acquire(
+                cost=cost,
+                identical_key=("ticks", ctx.con_id, cursor_s, ctx.what_to_show),
+                contract_key=contract_key,
+            )
+            batch = list(
+                await self._engine._conn.ib.reqHistoricalTicksAsync(
+                    ctx.contract,
+                    startDateTime=datetime.fromtimestamp(cursor_s, tz=UTC),
+                    endDateTime="",
+                    numberOfTicks=1000,
+                    whatToShow=ctx.what_to_show,
+                    useRth=bool(self._params.get("use_rth", True)),
+                    ignoreSize=False,
+                )
+                or []
+            )
+            if not batch:
+                break
+
+            # positional dedupe of the boundary second we already collected
+            have_at_cursor = sum(1 for t in raw if int(t.time.timestamp()) == cursor_s)
+            skipped = 0
+            for tick in batch:
+                if int(tick.time.timestamp()) == cursor_s and skipped < have_at_cursor:
+                    skipped += 1
+                else:
+                    break
+            fresh = batch[skipped:]
+            raw.extend(t for t in fresh if int(t.time.timestamp()) < end_s)
+
+            if len(batch) < 1000:
+                break
+            last_s = int(batch[-1].time.timestamp())
+            if last_s >= end_s:
+                break
+            if last_s == cursor_s:
+                # 1000+ ticks in one second: cannot page within it
+                gap = True
+                cursor_s = last_s + 1
+            else:
+                cursor_s = last_s
+        return raw, gap
+
+    def _convert(self, raw: list, chunk: dict, ctx: _InstrumentCtx) -> tuple[list, int, int]:
+        """Returns (objects, file_label_start_ns, file_label_end_ns)."""
+        start, end = chunk["range_start_ns"], chunk["range_end_ns"]
+        if self._data_type == "BARS":
+            objs = bars_to_nautilus(
+                raw,
+                instrument=ctx.instrument,
+                bar_type=ctx.bar_type,
+                spec=self._spec,
+                range_start_ns=start,
+                range_end_ns=end,
+            )
+            return objs, start + 1, end  # bars cover (start, end] in close time
+        if self._data_type == "TRADE_TICKS":
+            objs = trade_ticks_to_nautilus(
+                raw, instrument=ctx.instrument, range_start_ns=start, range_end_ns=end
+            )
+        else:
+            objs = quote_ticks_to_nautilus(
+                raw, instrument=ctx.instrument, range_start_ns=start, range_end_ns=end
+            )
+        return objs, start, end - 1  # ticks cover [start, end)
 
     async def _terminal(
         self,
@@ -559,6 +698,7 @@ class _JobRunner:
         error_code: int | None = None,
         error_msg: str | None = None,
         attempts: int | None = None,
+        gap_warning: bool = False,
     ) -> None:
         await chunks_repo.mark_terminal(
             self._db,
@@ -569,6 +709,7 @@ class _JobRunner:
             error_code=error_code,
             error_msg=error_msg,
             attempts=attempts,
+            gap_warning=gap_warning,
         )
         bump = {"done": 0, "empty": 0, "failed": 0}
         bump[{"done": "done", "empty": "empty", "failed": "failed"}[state]] = 1
@@ -578,6 +719,7 @@ class _JobRunner:
         self._counters[f"{state}_chunks"] += 1
         self._counters["rows_written"] += rows
         self._counters["bytes_written"] += bytes_
+        self._engine._tp.add(self._job_id, rows, bytes_)
         self._hub.emit_chunk(self._job_id, chunk["seq"], state)
         self._hub.emit_job(self._job_id, dict(self._counters))
         self._outstanding -= 1

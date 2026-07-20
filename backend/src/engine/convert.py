@@ -11,7 +11,9 @@ import json
 from datetime import UTC, date, datetime
 from typing import Any
 
-from nautilus_trader.model.data import Bar, BarType
+from nautilus_trader.model.data import Bar, BarType, QuoteTick, TradeTick
+from nautilus_trader.model.enums import AggressorSide
+from nautilus_trader.model.identifiers import TradeId
 from nautilus_trader.model.instruments import Instrument
 
 from nautilus_fetch.engine.barsize import BarSpec
@@ -105,5 +107,82 @@ def bars_to_nautilus(
     return out
 
 
+def trade_ticks_to_nautilus(
+    raw_ticks: list[Any],
+    *,
+    instrument: Instrument,
+    range_start_ns: int,
+    range_end_ns: int,
+) -> list[TradeTick]:
+    """IB HistoricalTickLast list -> Nautilus TradeTicks, filtered to [start, end).
+
+    IB tick times have second resolution and no trade ids; ids are synthesized
+    as "<epoch_second>-<index-within-second>", which is unique per instrument
+    because chunk boundaries fall on whole seconds.
+    """
+    out: list[TradeTick] = []
+    per_second: dict[int, int] = {}
+    for tick in raw_ticks:
+        ts_s = int(tick.time.timestamp())
+        ts = ts_s * _NS
+        if not range_start_ns <= ts < range_end_ns:
+            continue
+        price = float(tick.price)
+        size = float(tick.size)
+        if price <= 0 or size <= 0:  # unreported/combo artifacts
+            continue
+        index = per_second.get(ts_s, 0)
+        per_second[ts_s] = index + 1
+        out.append(
+            TradeTick(
+                instrument_id=instrument.id,
+                price=instrument.make_price(price),
+                size=instrument.make_qty(size),
+                aggressor_side=AggressorSide.NO_AGGRESSOR,
+                trade_id=TradeId(f"{ts_s}-{index}"),
+                ts_event=ts,
+                ts_init=ts,
+            )
+        )
+    out.sort(key=lambda tick: tick.ts_event)
+    return out
+
+
+def quote_ticks_to_nautilus(
+    raw_ticks: list[Any],
+    *,
+    instrument: Instrument,
+    range_start_ns: int,
+    range_end_ns: int,
+) -> list[QuoteTick]:
+    """IB HistoricalTickBidAsk list -> Nautilus QuoteTicks, filtered to [start, end)."""
+    out: list[QuoteTick] = []
+    for tick in raw_ticks:
+        ts = int(tick.time.timestamp()) * _NS
+        if not range_start_ns <= ts < range_end_ns:
+            continue
+        bid = float(tick.priceBid)
+        ask = float(tick.priceAsk)
+        if bid <= 0 or ask <= 0:
+            continue
+        out.append(
+            QuoteTick(
+                instrument_id=instrument.id,
+                bid_price=instrument.make_price(bid),
+                ask_price=instrument.make_price(ask),
+                bid_size=instrument.make_qty(max(float(tick.sizeBid), 0.0)),
+                ask_size=instrument.make_qty(max(float(tick.sizeAsk), 0.0)),
+                ts_event=ts,
+                ts_init=ts,
+            )
+        )
+    out.sort(key=lambda tick: tick.ts_event)
+    return out
+
+
 def chunk_end_datetime(range_end_ns: int) -> datetime:
     return datetime.fromtimestamp(range_end_ns / _NS, tz=UTC)
+
+
+def chunk_start_datetime(range_start_ns: int) -> datetime:
+    return datetime.fromtimestamp(range_start_ns / _NS, tz=UTC)

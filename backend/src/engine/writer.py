@@ -1,11 +1,13 @@
 """Idempotent writes into the Nautilus ParquetDataCatalog.
 
 One catalog instance, writes serialized behind an asyncio lock and executed on
-a worker thread (pyarrow writes are blocking). In close-timestamp terms a chunk
-covers (start, end], so files are labeled [start+1ns, end] and adjacent chunks
-never collide with the catalog's disjoint-interval check. A rewrite of the same
-chunk range trips that check, deletes exactly its own range, and writes again —
-which is what makes chunk downloads safely repeatable.
+a worker thread (pyarrow writes are blocking). The caller supplies inclusive
+file-label bounds chosen so adjacent chunks never collide with the catalog's
+disjoint-interval check: bars cover (start, end] in close-timestamp terms so
+labels are [start+1ns, end]; ticks cover [start, end) so labels are
+[start, end-1ns]. A rewrite of the same chunk range trips the disjoint check,
+deletes exactly its own range, and writes again — which is what makes chunk
+downloads safely repeatable.
 """
 
 from __future__ import annotations
@@ -40,17 +42,17 @@ class CatalogWriter:
         if not existing:
             self._catalog.write_data([instrument])
 
-    async def write_chunk(self, objs: list, *, range_start_ns: int, range_end_ns: int) -> int:
+    async def write_chunk(self, objs: list, *, label_start_ns: int, label_end_ns: int) -> int:
         """Write one chunk's objects; returns bytes added to the catalog."""
         if not objs:
             return 0
         async with self._lock:
-            return await asyncio.to_thread(self._write_chunk_sync, objs, range_start_ns, range_end_ns)
+            return await asyncio.to_thread(self._write_chunk_sync, objs, label_start_ns, label_end_ns)
 
-    def _write_chunk_sync(self, objs: list, range_start_ns: int, range_end_ns: int) -> int:
+    def _write_chunk_sync(self, objs: list, label_start_ns: int, label_end_ns: int) -> int:
         identifier = self._identifier_of(objs[0])
         size_before = self._identifier_size(identifier)
-        start, end = range_start_ns + 1, range_end_ns  # (start, end] -> inclusive file label
+        start, end = label_start_ns, label_end_ns
         try:
             self._catalog.write_data(objs, start=start, end=end)
         except ValueError as exc:

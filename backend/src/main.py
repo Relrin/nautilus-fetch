@@ -14,6 +14,7 @@ from nautilus_fetch.config import Settings
 from nautilus_fetch.db.engine import create_db_engine
 from nautilus_fetch.db.migrate import run_migrations
 from nautilus_fetch.engine.engine import JobEngine
+from nautilus_fetch.engine.throughput import ThroughputTracker
 from nautilus_fetch.engine.writer import CatalogWriter
 from nautilus_fetch.ib.connection import IBConnectionManager
 from nautilus_fetch.ib.search import InstrumentSearchService
@@ -50,6 +51,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             contract_burst_window_s=app_settings.pacing_contract_burst_window_s,
         )
         app.state.writer = CatalogWriter(app_settings.catalog_path)
+        app.state.throughput = ThroughputTracker(
+            app.state.db,
+            app.state.hub,
+            interval_s=app_settings.throughput_sample_interval_s,
+            persist_every=app_settings.throughput_persist_every,
+            retention_h=app_settings.throughput_retention_h,
+        )
+        await app.state.throughput.start()
         app.state.engine = JobEngine(
             db=app.state.db,
             conn=app.state.ib_conn,
@@ -58,11 +67,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             search=app.state.search,
             settings=app_settings,
             hub=app.state.hub,
+            throughput=app.state.throughput,
         )
         await app.state.engine.start()
         logger.info("nautilus-fetch %s started", __version__)
         yield
         await app.state.engine.stop()
+        await app.state.throughput.stop()
         await app.state.hub.stop()
         await app.state.ib_conn.stop()
         await app.state.db.dispose()

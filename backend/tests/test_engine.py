@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import time
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -11,7 +11,7 @@ from nautilus_fetch.db.engine import create_db_engine
 from nautilus_fetch.db.migrate import run_migrations
 from nautilus_fetch.db.repos import chunks as chunks_repo
 from nautilus_fetch.db.repos import jobs as jobs_repo
-from nautilus_fetch.engine.engine import BarsJobSpec, JobEngine, JobValidationError
+from nautilus_fetch.engine.engine import JobEngine, JobSpec, JobValidationError
 from nautilus_fetch.engine.writer import CatalogWriter
 from nautilus_fetch.ib.search import InstrumentSearchService
 from nautilus_fetch.pacing import PacingGate
@@ -24,13 +24,13 @@ END = datetime(2026, 6, 4, tzinfo=UTC)
 TERMINAL = {"completed", "completed_with_failures", "failed", "canceled"}
 
 
-def make_spec(**kwargs) -> BarsJobSpec:
+def make_spec(**kwargs) -> JobSpec:
     kwargs.setdefault("con_ids", [265598])
     kwargs.setdefault("bar_size", "M1")
     kwargs.setdefault("range_start", START)
     kwargs.setdefault("range_end", END)
     kwargs.setdefault("max_retries", 2)
-    return BarsJobSpec(**kwargs)
+    return JobSpec(**kwargs)
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ async def wait_terminal(db, job_id: str, timeout: float = 30.0) -> dict:
 
 
 async def test_happy_path_two_symbols(env):
-    job, warnings = await env.engine.submit_bars(make_spec(con_ids=[265598, 272093]))
+    job, warnings = await env.engine.submit(make_spec(con_ids=[265598, 272093]))
     assert job["total_chunks"] == 6  # 3 weekdays x 2 symbols
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed"
@@ -105,7 +105,7 @@ async def test_empty_chunk_counts_as_success(env):
         265598,
         RequestError(1, 162, "Historical Market Data Service error message:HMDS query returned no data"),
     )
-    job, _ = await env.engine.submit_bars(make_spec())
+    job, _ = await env.engine.submit(make_spec())
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed"
     assert final["empty_chunks"] == 1
@@ -115,7 +115,7 @@ async def test_empty_chunk_counts_as_success(env):
 async def test_transient_error_retries_until_success(env):
     env.fake.add_fault(265598, RequestError(1, 9999, "flaky farm"))
     env.fake.add_fault(265598, RequestError(1, 9999, "flaky farm again"))
-    job, _ = await env.engine.submit_bars(make_spec())
+    job, _ = await env.engine.submit(make_spec())
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed"
     assert final["done_chunks"] == 3
@@ -127,7 +127,7 @@ async def test_transient_exhaustion_fails_chunk(env):
     for _ in range(5):
         env.fake.add_fault(265598, RequestError(1, 9999, "always broken"))
     # single-day range -> exactly one chunk, which exhausts its retry budget
-    job, _ = await env.engine.submit_bars(
+    job, _ = await env.engine.submit(
         make_spec(max_retries=1, range_end=datetime(2026, 6, 2, tzinfo=UTC))
     )
     final = await wait_terminal(env.db, job["id"])
@@ -141,7 +141,7 @@ async def test_transient_exhaustion_fails_chunk(env):
 
 async def test_permanent_error_fails_immediately_with_hint(env):
     env.fake.add_fault(265598, RequestError(1, 354, "Requested market data is not subscribed"))
-    job, _ = await env.engine.submit_bars(make_spec())
+    job, _ = await env.engine.submit(make_spec())
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed_with_failures"
     failures = await chunks_repo.failures(env.db, job["id"])
@@ -152,7 +152,7 @@ async def test_permanent_error_fails_immediately_with_hint(env):
 
 async def test_pacing_violation_requeues_without_attempt(env):
     env.fake.add_fault(265598, RequestError(1, 162, "API historical data query cancelled: pacing violation"))
-    job, _ = await env.engine.submit_bars(make_spec())
+    job, _ = await env.engine.submit(make_spec())
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed"
     assert final["done_chunks"] == 3
@@ -162,7 +162,7 @@ async def test_pacing_violation_requeues_without_attempt(env):
 
 async def test_retry_failed_after_completion(env):
     env.fake.add_fault(265598, RequestError(1, 354, "Requested market data is not subscribed"))
-    job, _ = await env.engine.submit_bars(make_spec())
+    job, _ = await env.engine.submit(make_spec())
     final = await wait_terminal(env.db, job["id"])
     assert final["state"] == "completed_with_failures"
 
@@ -175,7 +175,7 @@ async def test_retry_failed_after_completion(env):
 
 async def test_pause_and_resume(env):
     env.fake.latency_s = 0.05
-    job, _ = await env.engine.submit_bars(make_spec(con_ids=[265598, 272093], workers=1))
+    job, _ = await env.engine.submit(make_spec(con_ids=[265598, 272093], workers=1))
     await env.engine.pause(job["id"])
     await asyncio.sleep(0.15)
     calls_while_paused = env.fake.calls["reqHistoricalData"]
@@ -192,7 +192,7 @@ async def test_pause_and_resume(env):
 
 async def test_cancel(env):
     env.fake.latency_s = 0.05
-    job, _ = await env.engine.submit_bars(make_spec(con_ids=[265598, 272093], workers=1))
+    job, _ = await env.engine.submit(make_spec(con_ids=[265598, 272093], workers=1))
     await asyncio.sleep(0.08)
     await env.engine.cancel(job["id"])
     row = await jobs_repo.get(env.db, job["id"])
@@ -202,7 +202,7 @@ async def test_cancel(env):
 
 async def test_restart_resume_no_refetch_of_done_chunks(env):
     env.fake.latency_s = 0.03
-    job, _ = await env.engine.submit_bars(make_spec(con_ids=[265598, 272093], workers=1))
+    job, _ = await env.engine.submit(make_spec(con_ids=[265598, 272093], workers=1))
     # let some chunks finish, then simulate a crash
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
@@ -229,12 +229,12 @@ async def test_restart_resume_no_refetch_of_done_chunks(env):
 async def test_rerun_same_range_is_idempotent(env):
     from nautilus_trader.model.data import Bar
 
-    job1, _ = await env.engine.submit_bars(make_spec())
+    job1, _ = await env.engine.submit(make_spec())
     await wait_terminal(env.db, job1["id"])
     rows_first = (await jobs_repo.get(env.db, job1["id"]))["rows_written"]
 
     # same instrument, same range: every chunk hits the overlap -> delete -> rewrite path
-    job2, _ = await env.engine.submit_bars(make_spec())
+    job2, _ = await env.engine.submit(make_spec())
     final2 = await wait_terminal(env.db, job2["id"])
     assert final2["state"] == "completed"
 
@@ -246,4 +246,4 @@ async def test_rerun_same_range_is_idempotent(env):
 
 async def test_submit_rejects_unknown_bar_size(env):
     with pytest.raises(JobValidationError):
-        await env.engine.submit_bars(make_spec(bar_size="7 mins"))
+        await env.engine.submit(make_spec(bar_size="7 mins"))

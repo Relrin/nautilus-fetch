@@ -35,5 +35,14 @@ class Settings(BaseSettings):
     retry_backoff_base_s: float = 5.0
     retry_backoff_max_s: float = 300.0
 
+    # Tick backfill chunking: hours per chunk (stocks vs 24h markets)
+    tick_chunk_stk_hours: int = 1
+    tick_chunk_fx_hours: int = 24
+
+    # Throughput sampling
+    throughput_sample_interval_s: float = 1.0
+    throughput_persist_every: int = 5
+    throughput_retention_h: int = 24
+
     # API
     ws_batch_ms: int = 500

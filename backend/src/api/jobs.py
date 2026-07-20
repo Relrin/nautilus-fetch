@@ -1,12 +1,15 @@
+import time
+
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from nautilus_fetch.api.schemas import JobCreateRequest, job_dto
 from nautilus_fetch.api.ws import CHUNK_STATE_CODES
 from nautilus_fetch.db.repos import chunks as chunks_repo
 from nautilus_fetch.db.repos import jobs as jobs_repo
+from nautilus_fetch.db.repos import samples as samples_repo
 from nautilus_fetch.engine.engine import (
-    BarsJobSpec,
     JobNotFoundError,
+    JobSpec,
     JobValidationError,
 )
 from nautilus_fetch.ib.search import IBUnavailableError, InstrumentNotFoundError
@@ -20,8 +23,9 @@ def _engine(request: Request):
 
 @router.post("", status_code=201)
 async def create_job(request: Request, body: JobCreateRequest) -> dict:
-    spec = BarsJobSpec(
+    spec = JobSpec(
         con_ids=body.con_ids,
+        data_type=body.data_type,
         bar_size=body.bar_size,
         range_start=body.start,
         range_end=body.end,
@@ -32,7 +36,7 @@ async def create_job(request: Request, body: JobCreateRequest) -> dict:
         max_retries=body.max_retries,
     )
     try:
-        job, warnings = await _engine(request).submit_bars(spec)
+        job, warnings = await _engine(request).submit(spec)
     except JobValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except InstrumentNotFoundError as exc:
@@ -107,6 +111,23 @@ async def job_chunks(request: Request, job_id: str) -> dict:
         "state_codes": CHUNK_STATE_CODES,
         "cells": [[seq, CHUNK_STATE_CODES[state]] for seq, state in cells],
     }
+
+
+@router.get("/{job_id}/throughput")
+async def job_throughput(
+    request: Request,
+    job_id: str,
+    window: int = Query(default=600, ge=10, le=86_400),
+) -> dict:
+    await _job_or_404(request, job_id)
+    tracker = getattr(request.app.state, "throughput", None)
+    samples = tracker.recent(job_id, window) if tracker is not None else None
+    source = "live"
+    if samples is None:  # job not actively tracked: serve persisted samples
+        since_ms = int((time.time() - window) * 1000)
+        samples = await samples_repo.recent(request.app.state.db, job_id, since_ms)
+        source = "persisted"
+    return {"window_s": window, "source": source, "samples": samples}
 
 
 @router.get("/{job_id}/failures")
