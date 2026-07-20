@@ -1,5 +1,4 @@
 # nautilus-fetch
-
 A self-hosted web app that helps to manage and download datasets via [IB Gateway](https://github.com/gnzsnz/ib-gateway-docker) 
 in order to use for backtests & running along with the [Nautilus Trader](https://nautilustrader.io).
 
@@ -78,10 +77,9 @@ of directories. Shortly speaking, it can be described this way:
 ```
 
 ## Limits worth knowing
-
 - Bars <= 30 s and historical ticks: only ~6 months back (IB limit; the planner
   clamps and warns)
-- Historical ticks arrive ≤ 1000 per request with second-resolution timestamps;
+- Historical ticks arrive <= 1000 per request with second-resolution timestamps;
   seconds with more than 1000 ticks cannot be fully retrieved (chunk gets
   `gap_warning`)
 - Depth subscriptions are capped by `MAX_DEPTH_SUBSCRIPTIONS` (default 3,
@@ -89,6 +87,5 @@ of directories. Shortly speaking, it can be described this way:
 - One process, one gateway socket, one client id is by design
 
 ## License
-
 nautilus-fetch is published under the BSD 3-Clause license. See [LICENSE](LICENSE) for details.
 
