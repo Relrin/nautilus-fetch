@@ -1,0 +1,61 @@
+[project]
+name = "nautilus-fetch"
+version = "0.1.0"
+description = "Manage historical market data downloads from Interactive Brokers into a Nautilus ParquetDataCatalog"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "nautilus_trader[ib]==1.230.0",
+    "ib_async==2.1.0",
+    "fastapi==0.139.2",
+    "uvicorn[standard]==0.51.0",
+    "pydantic-settings==2.14.2",
+    "sqlalchemy[asyncio]==2.0.51",
+    "aiosqlite==0.22.1",
+    "alembic==1.18.5",
+    "croniter==6.2.4",
+    "python-ulid==3.2.1",
+]
+
+[project.optional-dependencies]
+postgres = ["asyncpg==0.31.0"]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "httpx==0.28.1",
+    "polars==1.42.1",
+    "pyarrow==25.0.0",
+]
+
+[build-system]
+requires = ["setuptools==83.0.0"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout: modules live in src/, imported as nautilus_fetch.*
+# (setuptools editable installs support this rename; hatchling's do not)
+[tool.setuptools]
+packages = [
+    "nautilus_fetch",
+    "nautilus_fetch.api",
+    "nautilus_fetch.db",
+    "nautilus_fetch.db.migrations",
+    "nautilus_fetch.db.migrations.versions",
+    "nautilus_fetch.engine",
+    "nautilus_fetch.ib",
+]
+
+[tool.setuptools.package-dir]
+nautilus_fetch = "src"
+
+[tool.setuptools.package-data]
+"nautilus_fetch.db.migrations" = ["script.py.mako"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "ib_live: requires a live IB paper gateway (deselected by default)",
+    "postgres: requires a PostgreSQL server (deselected by default)",
+]
+addopts = "-m 'not ib_live and not postgres'"

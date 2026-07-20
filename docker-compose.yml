@@ -1,0 +1,31 @@
+services:
+  nautilus-fetch:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      IB_HOST: ${IB_HOST:-host.docker.internal}
+      IB_PORT: ${IB_PORT:-4002}
+      IB_CLIENT_ID: ${IB_CLIENT_ID:-17}
+      DATABASE_URL: ${DATABASE_URL:-sqlite+aiosqlite:////data/state/nautilus-fetch.sqlite}
+      CATALOG_PATH: /data/catalog
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ${STATE_DIR:-./deploy-data/state}:/data/state
+      - ${CATALOG_DIR:-./deploy-data/catalog}:/data/catalog
+    restart: unless-stopped
+
+  # Optional PostgreSQL state backend. Uncomment and set
+  # DATABASE_URL=postgresql+asyncpg://nautilus:nautilus@postgres:5432/nautilus_fetch
+  #
+  # postgres:
+  #   image: postgres:17.5
+  #   environment:
+  #     POSTGRES_USER: nautilus
+  #     POSTGRES_PASSWORD: nautilus
+  #     POSTGRES_DB: nautilus_fetch
+  #   volumes:
+  #     - ${POSTGRES_DIR:-./deploy-data/postgres}:/var/lib/postgresql/data
+  #   restart: unless-stopped
