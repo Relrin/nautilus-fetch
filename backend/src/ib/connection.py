@@ -87,6 +87,10 @@ class IBConnectionManager:
             from ib_async import IB
 
             self._ib = IB()
+        # Fail request futures with RequestError(code, message) instead of
+        # silently returning empty results — the engine's failure classifier
+        # depends on seeing the IB error code.
+        self._ib.RaiseRequestErrors = True
         self._ib.disconnectedEvent += self._on_disconnected
         self._ib.errorEvent += self._on_error_event
         self._stopping = False

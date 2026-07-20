@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
 import logging
 import time
@@ -13,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from nautilus_fetch.db.repos import instruments as instruments_repo
 from nautilus_fetch.ib.connection import ConnState, IBConnectionManager
+from nautilus_fetch.ib.serialize import to_jsonable
 from nautilus_fetch.ib.shim import derive_instrument_id
 
 logger = logging.getLogger(__name__)
@@ -47,18 +47,6 @@ class MinIntervalLimiter:
             if wait > 0:
                 await asyncio.sleep(wait)
             self._last = self._now()
-
-
-def _to_jsonable(obj: Any) -> Any:
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return {f.name: _to_jsonable(getattr(obj, f.name)) for f in dataclasses.fields(obj)}
-    if hasattr(obj, "_asdict"):  # NamedTuple (e.g. TagValue) -> keep field names
-        return {key: _to_jsonable(value) for key, value in obj._asdict().items()}
-    if isinstance(obj, (list, tuple)):
-        return [_to_jsonable(item) for item in obj]
-    if isinstance(obj, (str, int, float, bool)) or obj is None:
-        return obj
-    return str(obj)
 
 
 class InstrumentSearchService:
@@ -134,7 +122,7 @@ class InstrumentSearchService:
             "currency": contract.currency or None,
             "description": details.longName or None,
             "instrument_id": derive_instrument_id(details),
-            "details_json": json.dumps(_to_jsonable(details)),
+            "details_json": json.dumps(to_jsonable(details)),
             "refreshed_at": now_ms,
         }
         await instruments_repo.upsert(self._db, row)

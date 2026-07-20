@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     ib_connect_timeout_s: float = 10.0
     ib_reconnect_backoff_initial_s: float = 2.0
     ib_reconnect_backoff_max_s: float = 60.0
+    ib_request_timeout_s: float = 120.0
 
     # Storage. Relative defaults are dev-friendly; Docker sets absolute paths.
     catalog_path: Path = Path("data/catalog")
@@ -24,12 +25,15 @@ class Settings(BaseSettings):
     pacing_identical_cooldown_s: float = 15.0
     pacing_contract_burst: int = 5
     pacing_contract_burst_window_s: float = 2.0
+    pacing_violation_cooldown_s: float = 60.0
 
     # Job engine
     default_workers: int = 4
     max_workers: int = 8
     max_chunks_per_job: int = 50_000
     max_depth_subscriptions: int = 3
+    retry_backoff_base_s: float = 5.0
+    retry_backoff_max_s: float = 300.0
 
     # API
     ws_batch_ms: int = 500
