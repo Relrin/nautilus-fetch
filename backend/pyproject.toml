@@ -40,6 +40,7 @@ packages = [
     "nautilus_fetch.api",
     "nautilus_fetch.db",
     "nautilus_fetch.db.migrations",
+    "nautilus_fetch.db.repos",
     "nautilus_fetch.db.migrations.versions",
     "nautilus_fetch.engine",
     "nautilus_fetch.ib",

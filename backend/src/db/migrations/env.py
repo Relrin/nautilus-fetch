@@ -37,7 +37,21 @@ async def _run_async_migrations() -> None:
     await connectable.dispose()
 
 
+def run_migrations_online() -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(_run_async_migrations())
+    else:
+        # invoked from inside a running loop (sync helper called from async
+        # code): run in a private loop on a worker thread
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(asyncio.run, _run_async_migrations()).result()
+
+
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(_run_async_migrations())
+    run_migrations_online()

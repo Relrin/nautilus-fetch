@@ -6,11 +6,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from nautilus_fetch import __version__
+from nautilus_fetch.api.instruments import router as instruments_router
 from nautilus_fetch.api.routes import router
 from nautilus_fetch.config import Settings
 from nautilus_fetch.db.engine import create_db_engine
 from nautilus_fetch.db.migrate import run_migrations
 from nautilus_fetch.ib.connection import IBConnectionManager
+from nautilus_fetch.ib.search import InstrumentSearchService
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             backoff_max_s=app_settings.ib_reconnect_backoff_max_s,
         )
         await app.state.ib_conn.start()
+        app.state.search = InstrumentSearchService(app.state.ib_conn, app.state.db)
         logger.info("nautilus-fetch %s started", __version__)
         yield
         await app.state.ib_conn.stop()
@@ -39,6 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="nautilus-fetch", version=__version__, lifespan=lifespan)
     app.include_router(router)
+    app.include_router(instruments_router)
 
     # Future frontend build lands in ./static (Docker copies it next to cwd).
     static_dir = Path("static")
