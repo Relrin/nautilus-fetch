@@ -1,4 +1,5 @@
 import time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -27,13 +28,18 @@ async def create_job(request: Request, body: JobCreateRequest) -> dict:
         con_ids=body.con_ids,
         data_type=body.data_type,
         bar_size=body.bar_size,
-        range_start=body.start,
+        range_start=body.start or datetime.now(UTC),
         range_end=body.end,
         name=body.name,
         what_to_show=body.what_to_show,
         use_rth=body.use_rth,
         workers=body.workers,
         max_retries=body.max_retries,
+        depth_levels=body.depth_levels,
+        snapshot_interval_ms=body.snapshot_interval_ms,
+        capture_from=body.capture_from,
+        capture_until=body.capture_until,
+        capture_window=body.capture_window.model_dump() if body.capture_window else None,
     )
     try:
         job, warnings = await _engine(request).submit(spec)
@@ -98,8 +104,20 @@ async def retry_failed(request: Request, job_id: str) -> dict:
     await _job_or_404(request, job_id)
     try:
         return job_dto(await _engine(request).retry_failed(job_id))
+    except JobValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/{job_id}/stop")
+async def stop_recorder(request: Request, job_id: str) -> dict:
+    """Finalize a DEPTH recorder: flush buffered segments and complete the job."""
+    await _job_or_404(request, job_id)
+    try:
+        return job_dto(await _engine(request).stop_recorder(job_id))
+    except JobValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/{job_id}/chunks")

@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     tick_chunk_stk_hours: int = 1
     tick_chunk_fx_hours: int = 24
 
+    # L2 depth recorder
+    depth_default_levels: int = 10
+    depth_snapshot_interval_ms: int = 1000  # 0 = snapshot on every book update
+    depth_flush_interval_s: float = 300.0  # buffer -> catalog segment cadence
+
     # Throughput sampling
     throughput_sample_interval_s: float = 1.0
     throughput_persist_every: int = 5

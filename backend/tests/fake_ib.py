@@ -110,6 +110,8 @@ class FakeIB:
         # ...except dense seconds: (conId, epoch_second) -> tick count that second
         self.dense_seconds: dict[tuple[int, int], int] = {}
         self.RaiseRequestErrors = False  # set by the real connection manager; unused here
+        self.depth_tickers: dict[int, FakeTicker] = {}
+        self.active_depth: set[int] = set()
 
     def add_details(self, details: ContractDetails) -> None:
         self.details[details.contract.conId] = [details]
@@ -253,6 +255,44 @@ class FakeIB:
                 if len(out) >= numberOfTicks:
                     return out
         return out
+
+
+    def reqMktDepth(self, contract: Contract, numRows: int = 5, isSmartDepth: bool = False, mktDepthOptions=None):
+        self.calls["reqMktDepth"] += 1
+        self.active_depth.add(contract.conId)
+        ticker = self.depth_tickers.get(contract.conId)
+        if ticker is None:
+            base = 100.0 + (contract.conId % 50)
+            ticker = FakeTicker(contract)
+            ticker.set_levels(
+                bids=[(round(base - 0.01 * (i + 1), 2), 100.0 * (i + 1)) for i in range(numRows)],
+                asks=[(round(base + 0.01 * (i + 1), 2), 90.0 * (i + 1)) for i in range(numRows)],
+            )
+            self.depth_tickers[contract.conId] = ticker
+        return ticker
+
+    def cancelMktDepth(self, contract: Contract, isSmartDepth: bool = False) -> None:
+        self.calls["cancelMktDepth"] += 1
+        self.active_depth.discard(contract.conId)
+
+
+class FakeTicker:
+    """Just enough of ib_async.Ticker for the depth recorder: domBids/domAsks + updateEvent."""
+
+    def __init__(self, contract: Contract) -> None:
+        import eventkit
+
+        self.contract = contract
+        self.domBids: list = []
+        self.domAsks: list = []
+        self.updateEvent = eventkit.Event()
+
+    def set_levels(self, bids: list[tuple[float, float]], asks: list[tuple[float, float]]) -> None:
+        from ib_async.objects import DOMLevel
+
+        self.domBids = [DOMLevel(price, size, "") for price, size in bids]
+        self.domAsks = [DOMLevel(price, size, "") for price, size in asks]
+        self.updateEvent.emit(self)
 
 
 class FakeConn:

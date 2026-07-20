@@ -60,12 +60,14 @@ async def bump_counters(
     failed: int = 0,
     rows: int = 0,
     bytes_: int = 0,
+    total: int = 0,  # DEPTH recorders grow total_chunks as segments flush
 ) -> None:
     async with db.begin() as conn:
         await conn.execute(
             sa.update(jobs)
             .where(jobs.c.id == job_id)
             .values(
+                total_chunks=jobs.c.total_chunks + total,
                 done_chunks=jobs.c.done_chunks + done,
                 empty_chunks=jobs.c.empty_chunks + empty,
                 failed_chunks=jobs.c.failed_chunks + failed,

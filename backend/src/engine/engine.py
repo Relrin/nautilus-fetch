@@ -44,6 +44,11 @@ from nautilus_fetch.engine.planner import (
     plan_bars,
     plan_ticks,
 )
+from nautilus_fetch.engine.recorder import (
+    CaptureWindow,
+    CaptureWindowError,
+    DepthRecorderRunner,
+)
 from nautilus_fetch.engine.throughput import NullThroughput, ThroughputTracker
 from nautilus_fetch.engine.writer import CatalogWriter
 from nautilus_fetch.ib.connection import IBConnectionManager
@@ -55,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 _NS = 1_000_000_000
 
-DATA_TYPES = ("BARS", "TRADE_TICKS", "QUOTE_TICKS")
+DATA_TYPES = ("BARS", "TRADE_TICKS", "QUOTE_TICKS", "DEPTH")
 
 
 class JobValidationError(ValueError):
@@ -70,7 +75,7 @@ class JobNotFoundError(LookupError):
 class JobSpec:
     con_ids: list[int]
     range_start: datetime
-    range_end: datetime
+    range_end: datetime | None = None  # None only for DEPTH recorders
     data_type: str = "BARS"
     bar_size: str | None = None  # required for BARS
     name: str | None = None
@@ -78,6 +83,12 @@ class JobSpec:
     use_rth: bool = True
     workers: int | None = None
     max_retries: int = 3
+    # DEPTH recorder options
+    depth_levels: int | None = None
+    snapshot_interval_ms: int | None = None
+    capture_from: datetime | None = None
+    capture_until: datetime | None = None
+    capture_window: dict | None = None
 
 
 @dataclass
@@ -181,6 +192,11 @@ class JobEngine:
                 )
             )
 
+        if spec.data_type == "DEPTH":
+            return await self._submit_depth(spec, contexts)
+        if spec.range_end is None:
+            raise JobValidationError("end is required for backfill jobs")
+
         head_timestamps = await self._head_timestamps(contexts, spec.use_rth)
         plan_inputs = [
             InstrumentPlanInput(
@@ -274,6 +290,78 @@ class JobEngine:
         await self._spawn(job)
         return await jobs_repo.get(self._db, job_id), warnings
 
+    async def _submit_depth(
+        self, spec: JobSpec, contexts: list[_InstrumentCtx]
+    ) -> tuple[dict, list[str]]:
+        try:
+            CaptureWindow.from_params(spec.capture_window)  # validate early
+        except CaptureWindowError as exc:
+            raise JobValidationError(str(exc)) from exc
+        active = sum(
+            runner.instrument_count
+            for runner in self._runners.values()
+            if isinstance(runner, DepthRecorderRunner)
+        )
+        budget = self._settings.max_depth_subscriptions
+        if active + len(contexts) > budget:
+            raise JobValidationError(
+                f"Depth subscription budget exceeded: {active} active + {len(contexts)} requested "
+                f"> {budget} (max_depth_subscriptions; limited by IB market data lines)"
+            )
+
+        job_id = str(ULID())
+        now_ms = _now_ms()
+        start_at = spec.capture_from or spec.range_start
+        job_row = {
+            "id": job_id,
+            "name": spec.name or f"depth x{len(contexts)}",
+            "state": "queued",
+            "data_type": "DEPTH",
+            "params_json": json.dumps(
+                {
+                    "depth_levels": spec.depth_levels or self._settings.depth_default_levels,
+                    "snapshot_interval_ms": spec.snapshot_interval_ms
+                    if spec.snapshot_interval_ms is not None
+                    else self._settings.depth_snapshot_interval_ms,
+                    "capture_from": spec.capture_from.isoformat() if spec.capture_from else None,
+                    "capture_until": spec.capture_until.isoformat() if spec.capture_until else None,
+                    "capture_window": spec.capture_window,
+                }
+            ),
+            "workers": 1,
+            "max_retries": 0,
+            "range_start_ns": int(start_at.timestamp() * _NS),
+            "range_end_ns": int(spec.capture_until.timestamp() * _NS) if spec.capture_until else None,
+            "total_chunks": 0,
+            "created_at": now_ms,
+            "updated_at": now_ms,
+        }
+        symbol_rows = [
+            {
+                "job_id": job_id,
+                "con_id": ctx.con_id,
+                "instrument_id": ctx.instrument_id,
+                "ordinal": ordinal,
+            }
+            for ordinal, ctx in enumerate(contexts)
+        ]
+        await jobs_repo.insert(self._db, job_row, symbol_rows)
+        await self._spawn(await self._job_or_raise(job_id))
+        return await self._job_or_raise(job_id), []
+
+    async def stop_recorder(self, job_id: str) -> dict:
+        """Finalize a DEPTH recorder: flush buffered segments and complete the job."""
+        job = await self._job_or_raise(job_id)
+        if job["data_type"] != "DEPTH":
+            raise JobValidationError("stop applies only to DEPTH recorder jobs")
+        runner = self._runners.pop(job_id, None)
+        if runner is not None:
+            await runner.stop()
+        if job["state"] in ("queued", "running", "paused"):
+            await jobs_repo.update(self._db, job_id, state="completed", finished_at=_now_ms())
+            self._hub.emit_job(job_id, {"state": "completed"})
+        return await self._job_or_raise(job_id)
+
     async def pause(self, job_id: str) -> dict:
         runner = self._runner_or_raise(job_id)
         await runner.pause()
@@ -282,12 +370,12 @@ class JobEngine:
     async def resume(self, job_id: str) -> dict:
         job = await self._job_or_raise(job_id)
         runner = self._runners.get(job_id)
-        if runner is not None:
-            await runner.resume()
-        elif job["state"] == "paused":
+        if runner is None and job["state"] == "paused":
             await self._spawn(job)
-        else:
+            runner = self._runners.get(job_id)
+        if runner is None:
             raise JobValidationError(f"Job {job_id} is not paused or running")
+        await runner.resume()
         return await self._job_or_raise(job_id)
 
     async def cancel(self, job_id: str) -> dict:
@@ -302,6 +390,8 @@ class JobEngine:
 
     async def retry_failed(self, job_id: str) -> dict:
         job = await self._job_or_raise(job_id)
+        if job["data_type"] == "DEPTH":
+            raise JobValidationError("retry-failed does not apply to DEPTH recorder jobs")
         reset = await chunks_repo.reset_failed_to_pending(self._db, job_id)
         if reset:
             await jobs_repo.bump_counters(self._db, job_id, failed=-reset)
@@ -357,7 +447,11 @@ class JobEngine:
         return job
 
     async def _spawn(self, job: dict) -> None:
-        runner = _JobRunner(self, job)
+        runner: _JobRunner | DepthRecorderRunner
+        if job["data_type"] == "DEPTH":
+            runner = DepthRecorderRunner(self, job)
+        else:
+            runner = _JobRunner(self, job)
         self._runners[job["id"]] = runner
         await runner.start()
 

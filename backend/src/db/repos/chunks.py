@@ -116,6 +116,15 @@ async def add_attempt(
         )
 
 
+async def max_seq(db: AsyncEngine, job_id: str) -> int:
+    async with db.connect() as conn:
+        result = await conn.execute(
+            sa.select(sa.func.max(chunks.c.seq)).where(chunks.c.job_id == job_id)
+        )
+        value = result.scalar()
+    return -1 if value is None else int(value)
+
+
 async def reset_active_to_pending(db: AsyncEngine) -> int:
     """Startup recovery: chunks that were in flight when the process died."""
     async with db.begin() as conn:

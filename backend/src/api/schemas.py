@@ -7,21 +7,36 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 _NS = 1_000_000_000
 
 
+class CaptureWindowModel(BaseModel):
+    start: str = Field(pattern=r"^\d{2}:\d{2}(:\d{2})?$")  # "09:30"
+    end: str = Field(pattern=r"^\d{2}:\d{2}(:\d{2})?$")  # "16:00"
+    tz: str = "UTC"  # IANA name, e.g. "America/New_York"
+    days: list[int] = Field(default=[0, 1, 2, 3, 4], max_length=7)  # 0=Mon .. 6=Sun
+
+
 class JobCreateRequest(BaseModel):
     con_ids: list[int] = Field(min_length=1, max_length=200)
-    start: datetime
-    end: datetime
-    data_type: Literal["BARS", "TRADE_TICKS", "QUOTE_TICKS"] = "BARS"
+    start: datetime | None = None  # optional for DEPTH (defaults to now)
+    end: datetime | None = None  # required for backfills; optional for DEPTH
+    data_type: Literal["BARS", "TRADE_TICKS", "QUOTE_TICKS", "DEPTH"] = "BARS"
     bar_size: str | None = None  # required when data_type == BARS
     name: str | None = Field(default=None, max_length=200)
     what_to_show: Literal["TRADES", "MIDPOINT", "BID", "ASK"] | None = None  # BARS only
     use_rth: bool = True
     workers: int | None = Field(default=None, ge=1, le=16)
     max_retries: int = Field(default=3, ge=0, le=10)
+    # DEPTH recorder options
+    depth_levels: int | None = Field(default=None, ge=1, le=10)
+    snapshot_interval_ms: int | None = Field(default=None, ge=0, le=60_000)
+    capture_from: datetime | None = None
+    capture_until: datetime | None = None
+    capture_window: CaptureWindowModel | None = None
 
-    @field_validator("start", "end")
+    @field_validator("start", "end", "capture_from", "capture_until")
     @classmethod
-    def ensure_timezone(cls, value: datetime) -> datetime:
+    def ensure_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
     @model_validator(mode="after")
@@ -30,6 +45,21 @@ class JobCreateRequest(BaseModel):
             raise ValueError("bar_size is required for BARS jobs")
         if self.data_type != "BARS" and self.what_to_show is not None:
             raise ValueError("what_to_show only applies to BARS jobs")
+        if self.data_type == "DEPTH":
+            if self.end is not None:
+                raise ValueError("DEPTH recorders are open-ended; use capture_until instead of end")
+        else:
+            if self.start is None or self.end is None:
+                raise ValueError("start and end are required for backfill jobs")
+            depth_fields = (
+                self.depth_levels,
+                self.snapshot_interval_ms,
+                self.capture_from,
+                self.capture_until,
+                self.capture_window,
+            )
+            if any(field is not None for field in depth_fields):
+                raise ValueError("depth/capture options only apply to DEPTH jobs")
         return self
 
 
