@@ -3,9 +3,27 @@ import json
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from nautilus_fetch.db.repos import instruments as instruments_repo
 from nautilus_fetch.ib.search import IBUnavailableError, InstrumentNotFoundError
 
 router = APIRouter(prefix="/api/instruments")
+
+
+@router.get("")
+async def list_instruments(
+    request: Request,
+    q: str | None = Query(default=None, max_length=64),
+    sec_type: str | None = Query(default=None, pattern=r"^[A-Z]{2,10}$"),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[dict]:
+    """Instruments this server already knows about.
+
+    Reads the local cache only — no IB round-trip, so it costs no pacing budget
+    and stays available while the gateway is down.
+    """
+    return await instruments_repo.list_cached(
+        request.app.state.db, query=q, sec_type=sec_type, limit=limit
+    )
 
 
 @router.get("/search")

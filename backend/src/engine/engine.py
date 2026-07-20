@@ -433,6 +433,11 @@ class JobEngine:
                 )
                 if isinstance(head, datetime):
                     result[ctx.con_id] = head
+                    # Cache it: the dashboard shows "history from" and would
+                    # otherwise have to spend another paced request for it.
+                    await instruments_repo.set_head_timestamp(
+                        self._db, ctx.con_id, int(head.timestamp() * 1_000_000_000)
+                    )
             except Exception as exc:
                 logger.info("Head timestamp unavailable for %s: %s", ctx.instrument_id, exc)
         return result

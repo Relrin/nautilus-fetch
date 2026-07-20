@@ -21,6 +21,8 @@ instruments = sa.Table(
     sa.Column("instrument_id", sa.Text),  # Nautilus id, e.g. 'AAPL.NASDAQ'
     sa.Column("details_json", sa.Text),
     sa.Column("refreshed_at", sa.BigInteger),
+    # Earliest data IB will serve, learned as a byproduct of job planning.
+    sa.Column("head_timestamp_ns", sa.BigInteger),
 )
 
 schedules = sa.Table(

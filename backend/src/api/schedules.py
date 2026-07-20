@@ -9,6 +9,7 @@ from nautilus_fetch.api.schemas import (
     job_dto,
     schedule_dto,
 )
+from nautilus_fetch.db.repos import jobs as jobs_repo
 from nautilus_fetch.db.repos import schedules as schedules_repo
 from nautilus_fetch.engine.engine import JobValidationError
 from nautilus_fetch.ib.search import IBUnavailableError, InstrumentNotFoundError
@@ -106,4 +107,6 @@ async def run_now(request: Request, schedule_id: str) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if job is None:
         return {"job": None, "detail": "already up to date"}
-    return {"job": job_dto(job), "detail": "job created"}
+    symbols = await jobs_repo.symbols_of(request.app.state.db, job["id"])
+    dto = job_dto(job, [symbol["instrument_id"] for symbol in symbols])
+    return {"job": dto, "detail": "job created"}

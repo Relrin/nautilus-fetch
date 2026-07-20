@@ -22,6 +22,12 @@ def _engine(request: Request):
     return request.app.state.engine
 
 
+async def _dto(request: Request, row: dict) -> dict:
+    """job_dto with its instrument list attached — the UI titles cards on it."""
+    symbols = await jobs_repo.symbols_of(request.app.state.db, row["id"])
+    return job_dto(row, [symbol["instrument_id"] for symbol in symbols])
+
+
 @router.post("", status_code=201)
 async def create_job(request: Request, body: JobCreateRequest) -> dict:
     spec = JobSpec(
@@ -49,7 +55,7 @@ async def create_job(request: Request, body: JobCreateRequest) -> dict:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except IBUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {**job_dto(job), "warnings": warnings}
+    return {**await _dto(request, job), "warnings": warnings}
 
 
 @router.get("")
@@ -60,7 +66,8 @@ async def list_jobs(
     offset: int = Query(default=0, ge=0),
 ) -> list[dict]:
     rows = await jobs_repo.list_jobs(request.app.state.db, state=state, limit=limit, offset=offset)
-    return [job_dto(row) for row in rows]
+    symbols = await jobs_repo.symbols_for(request.app.state.db, [row["id"] for row in rows])
+    return [job_dto(row, symbols.get(row["id"], [])) for row in rows]
 
 
 async def _job_or_404(request: Request, job_id: str) -> dict:
@@ -72,20 +79,20 @@ async def _job_or_404(request: Request, job_id: str) -> dict:
 
 @router.get("/{job_id}")
 async def get_job(request: Request, job_id: str) -> dict:
-    return job_dto(await _job_or_404(request, job_id))
+    return await _dto(request, await _job_or_404(request, job_id))
 
 
 @router.delete("/{job_id}")
 async def cancel_job(request: Request, job_id: str) -> dict:
     await _job_or_404(request, job_id)
-    return job_dto(await _engine(request).cancel(job_id))
+    return await _dto(request, await _engine(request).cancel(job_id))
 
 
 @router.post("/{job_id}/pause")
 async def pause_job(request: Request, job_id: str) -> dict:
     await _job_or_404(request, job_id)
     try:
-        return job_dto(await _engine(request).pause(job_id))
+        return await _dto(request, await _engine(request).pause(job_id))
     except JobValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -94,7 +101,7 @@ async def pause_job(request: Request, job_id: str) -> dict:
 async def resume_job(request: Request, job_id: str) -> dict:
     await _job_or_404(request, job_id)
     try:
-        return job_dto(await _engine(request).resume(job_id))
+        return await _dto(request, await _engine(request).resume(job_id))
     except JobValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -103,7 +110,7 @@ async def resume_job(request: Request, job_id: str) -> dict:
 async def retry_failed(request: Request, job_id: str) -> dict:
     await _job_or_404(request, job_id)
     try:
-        return job_dto(await _engine(request).retry_failed(job_id))
+        return await _dto(request, await _engine(request).retry_failed(job_id))
     except JobValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except JobNotFoundError as exc:
@@ -115,7 +122,7 @@ async def stop_recorder(request: Request, job_id: str) -> dict:
     """Finalize a DEPTH recorder: flush buffered segments and complete the job."""
     await _job_or_404(request, job_id)
     try:
-        return job_dto(await _engine(request).stop_recorder(job_id))
+        return await _dto(request, await _engine(request).stop_recorder(job_id))
     except JobValidationError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

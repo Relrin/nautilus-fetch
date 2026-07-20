@@ -60,14 +60,19 @@ def test_job_lifecycle_via_api(tmp_settings):
         assert job["state"] in {"queued", "running"}
         assert job["total_chunks"] == 2
         assert job["params"]["bar_size"] == "1 min"
+        # the dashboard titles cards on these, so every job endpoint must carry them
+        assert job["symbols"] == ["AAPL.NASDAQ"]
+        assert job["schedule_id"] is None
 
         final = poll_job(client, job["id"])
         assert final["state"] == "completed"
         assert final["progress"] == 1.0
         assert final["rows_written"] == 2 * 1440
+        assert final["symbols"] == ["AAPL.NASDAQ"]
 
         listed = client.get("/api/jobs").json()
         assert [item["id"] for item in listed] == [job["id"]]
+        assert listed[0]["symbols"] == ["AAPL.NASDAQ"]
 
         chunks = client.get(f"/api/jobs/{job['id']}/chunks").json()
         assert chunks["total"] == 2
@@ -75,6 +80,11 @@ def test_job_lifecycle_via_api(tmp_settings):
         assert chunks["cells"] == [[0, done_code], [1, done_code]]
 
         assert client.get(f"/api/jobs/{job['id']}/failures").json() == []
+
+        # planning learned the instrument's earliest data and cached it, so the
+        # sidebar can show "history from" without spending another IB request
+        instrument = client.get("/api/instruments/265598").json()
+        assert instrument["head_timestamp_ns"] == 946_684_800_000_000_000  # 2000-01-01Z
 
 
 def test_job_api_validation_errors(tmp_settings):

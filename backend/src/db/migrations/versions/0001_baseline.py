@@ -27,6 +27,7 @@ def upgrade() -> None:
         sa.Column("instrument_id", sa.Text),
         sa.Column("details_json", sa.Text),
         sa.Column("refreshed_at", sa.BigInteger),
+        sa.Column("head_timestamp_ns", sa.BigInteger),
     )
     op.create_table(
         "schedules",
