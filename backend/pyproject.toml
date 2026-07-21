@@ -1,6 +1,6 @@
 [project]
 name = "nautilus-fetch"
-version = "0.1.0"
+version = "0.2.0"
 description = "Manage historical market data downloads from Interactive Brokers into a Nautilus ParquetDataCatalog"
 requires-python = ">=3.13,<3.14"
 dependencies = [
