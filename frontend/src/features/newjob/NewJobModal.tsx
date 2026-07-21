@@ -178,11 +178,23 @@ export function NewJobModal({ onClose, prefill }: NewJobModalProps) {
           {/* Read-only: both are server configuration with no per-job override,
               so editable inputs here would silently do nothing. */}
           <div className="grid grid-cols-[180px_1fr] gap-[10px]">
+            {/* Both are longer than their fields, and a read-only input cannot
+                be selected-and-scrolled as naturally as an editable one. */}
             <Field label="Output folder">
-              <TextInput readOnly value={catalog.data?.path ?? '—'} className="text-t2" />
+              <TextInput
+                readOnly
+                value={catalog.data?.path ?? '—'}
+                title={catalog.data?.path ?? undefined}
+                className="text-t2"
+              />
             </Field>
             <Field label="Naming pattern">
-              <TextInput readOnly value={CATALOG_FILE_PATTERN} className="text-t2" />
+              <TextInput
+                readOnly
+                value={CATALOG_FILE_PATTERN}
+                title={CATALOG_FILE_PATTERN}
+                className="text-t2"
+              />
             </Field>
           </div>
 

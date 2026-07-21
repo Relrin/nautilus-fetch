@@ -76,19 +76,26 @@ export function ScheduleDetailAside({
               <Chip tone="config">{schedule.template.what_to_show}</Chip>
             )}
             <Chip tone="config">{schedule.template.use_rth ? 'RTH only' : 'all hours'}</Chip>
-            <Chip tone="config">{`${schedule.template.workers ?? 4}w`}</Chip>
-            <Chip tone="config">{`${schedule.template.max_retries}r`}</Chip>
+            {/* Spelled out here, unlike the card's terse `6w · 3r · lag 30m`:
+                the aside has the width and this is where someone reads config. */}
+            <Chip tone="config" title="Parallel workers">
+              {`${schedule.template.workers ?? 4} workers`}
+            </Chip>
+            <Chip tone="config" title="Max retries per chunk">
+              {`retries ${schedule.template.max_retries}`}
+            </Chip>
             <Chip tone="config" title="Stay this far behind real time so data settles">
               {`lag ${schedule.template.lag_minutes}m`}
             </Chip>
             <Chip tone="config" title="Days fetched on a first run or for a newly added instrument">
               {`lookback ${schedule.template.lookback_days}d`}
             </Chip>
-            {schedule.catchup && (
-              <Chip tone="config" title="Missed runs are replayed when the server restarts">
-                catch-up
-              </Chip>
-            )}
+            {/* Always shown, both ways: "no catch-up chip" is ambiguous between
+                off and not-applicable, and this decides whether a restart
+                replays missed runs. */}
+            <Chip tone="config" title="Whether missed runs are replayed when the server restarts">
+              {schedule.catchup ? 'catchup on' : 'catchup off'}
+            </Chip>
           </div>
 
           <div className="border-b1 bg-panel rounded-8 flex flex-col gap-[8px] border px-[12px] py-[10px]">

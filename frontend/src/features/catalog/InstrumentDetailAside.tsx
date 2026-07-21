@@ -56,8 +56,12 @@ export function InstrumentDetailAside({
           </div>
 
           <div className="flex items-baseline gap-[10px]">
-            <span className="text-24 text-t1 font-mono font-bold">{fmtBytes(row.bytes)}</span>
-            <span className="text-105 text-t2 font-mono">{`${fmtInt(row.files)} files`}</span>
+            <span className="text-24 text-t1 flex-none font-mono font-bold">
+              {fmtBytes(row.bytes)}
+            </span>
+            <span className="text-105 text-t2 min-w-0 truncate font-mono">
+              {`${fmtInt(row.files)} files`}
+            </span>
           </div>
 
           <Panel title="COVERAGE" caption="outer bounds · gaps normal">

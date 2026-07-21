@@ -271,6 +271,7 @@ export function ScheduleEditorModal({ schedule, picked, onClose }: ScheduleEdito
             <TextInput
               readOnly
               value={catalog.data?.path ?? '—'}
+              title={catalog.data?.path ?? undefined}
               className="text-t2 py-[8px] pr-[11px] pl-[11px]"
             />
           </Field>

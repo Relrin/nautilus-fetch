@@ -31,6 +31,11 @@ export function InspectorIdentity({ job }: { job: JobDto }) {
       </div>
 
       <div className="mt-[8px] flex flex-wrap gap-[5px]">
+        {/* Spelled out, not `4w` / `3r`. The aside has room for words and the
+            abbreviations were only legible to whoever wrote them. */}
+        <Chip tone="config" title="Output format">
+          parquet
+        </Chip>
         <Chip tone="config">{kindLabel(job.data_type, job.params.bar_size)}</Chip>
         {job.params.what_to_show && <Chip tone="config">{job.params.what_to_show}</Chip>}
         {recorder && job.params.depth_levels !== undefined && (
@@ -59,9 +64,18 @@ export function InspectorIdentity({ job }: { job: JobDto }) {
             would be meaningless, and retries do not apply to a live stream. */}
         {!recorder && (
           <>
-            <Chip tone="config" title="Parallel workers">{`${job.workers}w`}</Chip>
-            <Chip tone="config" title="Max retries per chunk">{`${job.max_retries}r`}</Chip>
+            <Chip tone="config" title="Max retries per chunk">{`retries ${job.max_retries}`}</Chip>
+            <Chip tone="config" title="Parallel workers">
+              {`${job.workers} ${job.workers === 1 ? 'worker' : 'workers'}`}
+            </Chip>
           </>
+        )}
+        {/* The mockup's cadence chip. `schedule_id` is the truthful equivalent:
+            a job either came from a recurring rule or it did not. */}
+        {job.schedule_id !== null && (
+          <Chip tone="config" title="Created by a schedule">
+            scheduled
+          </Chip>
         )}
       </div>
     </section>

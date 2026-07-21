@@ -67,12 +67,18 @@ export function ScheduleCard({
             className="data-[size=default]:h-[19px] data-[size=default]:w-[34px]"
           />
         </span>
-        <span className="text-125 text-t1 font-semibold">{schedule.name}</span>
+        {/* Names are user-entered and the backend allows 200 characters, so
+            this genuinely can be long enough to push the whole row apart. */}
+        <span className="text-125 text-t1 min-w-0 truncate font-semibold" title={schedule.name}>
+          {schedule.name}
+        </span>
         <NdmBadge label={badge.label} className={badge.className} size="schedule" />
 
         <div className="flex-1" />
 
-        <span className="text-105 text-t2 truncate font-mono">{humanCron(schedule.cron)}</span>
+        <span className="text-105 text-t2 hidden max-w-[220px] min-w-0 truncate font-mono xl:block">
+          {humanCron(schedule.cron)}
+        </span>
         <Chip tone="track" className="text-95">
           {schedule.cron}
         </Chip>

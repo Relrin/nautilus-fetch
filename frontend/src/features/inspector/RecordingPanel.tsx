@@ -31,11 +31,13 @@ export function RecordingPanel({ job, now }: { job: JobDto; now: number }) {
     <Panel>
       <div className="flex items-center gap-[8px]">
         {live && <StatusDot color="var(--ndm-accent)" pulse />}
-        <span className="text-24 text-t1 font-mono leading-none font-semibold tabular-nums">
+        <span className="text-24 text-t1 flex-none font-mono leading-none font-semibold tabular-nums">
           {fmtClock(elapsed ?? 0)}
         </span>
         <div className="flex-1" />
-        <span className="text-t2 text-105 font-mono">{live ? 'recording' : job.state}</span>
+        <span className="text-t2 text-105 min-w-0 truncate font-mono">
+          {live ? 'recording' : job.state}
+        </span>
       </div>
 
       <dl className="mt-[11px] flex flex-col gap-[5px]">

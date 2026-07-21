@@ -31,9 +31,13 @@ export function StatTileGrid({ job, ring, now }: StatTileGridProps) {
         </>
       ) : (
         <>
+          {/* Two lines: `8,024/12,480` is twelve characters and a tile is only
+              ~74px wide, so one line would either wrap or shrink the headline
+              number to 9.5px. The total belongs here, just not inline. */}
           <StatTile
             label="CHUNKS"
-            value={`${fmtInt(settled)}/${fmtInt(job.total_chunks)}`}
+            value={fmtInt(settled)}
+            sub={`of ${fmtInt(job.total_chunks)}`}
             title="Settled (done + empty + failed) out of planned"
           />
           <StatTile

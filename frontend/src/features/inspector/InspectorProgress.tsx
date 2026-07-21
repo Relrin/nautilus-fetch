@@ -29,10 +29,15 @@ export function InspectorProgress({ job, now }: { job: JobDto; now: number }) {
   return (
     <div>
       <div className="mb-[6px] flex items-baseline justify-between gap-[8px]">
-        <span className="text-24 text-t1 font-mono leading-none font-bold tabular-nums">
+        <span className="text-24 text-t1 flex-none font-mono leading-none font-bold tabular-nums">
           {job.total_chunks > 0 ? fmtPct(progress) : '—'}
         </span>
-        <span className="text-t2 text-105 truncate font-mono">{caption(job, eta, now)}</span>
+        {/* min-w-0 is what lets `truncate` actually engage inside a flex row —
+            without it the caption keeps its intrinsic width and shoves the
+            percentage out of the column. */}
+        <span className="text-t2 text-105 min-w-0 truncate font-mono">
+          {caption(job, eta, now)}
+        </span>
       </div>
 
       <ProgressBar value={progress} failed={jobFailedFraction(job)} size="inspector" tone={tone} />
