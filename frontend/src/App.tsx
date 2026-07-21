@@ -9,6 +9,7 @@ import { InspectorAside } from '@/features/inspector/InspectorAside'
 import { InstrumentsAside } from '@/features/instruments/InstrumentsAside'
 import { NewJobModal, type NewJobPrefill } from '@/features/newjob/NewJobModal'
 import { QueuePane } from '@/features/queue/QueuePane'
+import { SchedulesPane } from '@/features/schedules/SchedulesPane'
 import { TopBar } from '@/features/topbar/TopBar'
 import { SelectionProvider } from '@/state/selection'
 import { useSelection } from '@/state/selectionContext'
@@ -33,7 +34,7 @@ function Shell() {
       <div className="text-13 grid h-screen min-w-[1280px] grid-rows-[50px_1fr] overflow-hidden">
         <TopBar />
         {page === 'queue' && <QueuePage />}
-        {page === 'schedules' && <SchedulesPlaceholder />}
+        {page === 'schedules' && <SchedulesPane />}
         {page === 'catalog' && <CatalogPlaceholder />}
       </div>
       <ToastHost />
@@ -93,15 +94,6 @@ function QueuePage() {
       <QueuePane onNewJob={openBlank} onRerun={openForRerun} />
       <InspectorAside />
       {modalOpen && <NewJobModal onClose={() => setModalOpen(false)} prefill={prefill} />}
-    </div>
-  )
-}
-
-function SchedulesPlaceholder() {
-  return (
-    <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_344px]">
-      <main className="bg-page flex min-h-0 flex-col" />
-      <aside className="border-b1 bg-bar flex min-h-0 flex-col border-l" />
     </div>
   )
 }
