@@ -6,6 +6,7 @@ import { NautilusMark } from '@/components/ndm/NautilusMark'
 import { fmtBytes } from '@/lib/format'
 
 import { ConnectionPill } from './ConnectionPill'
+import { LivePill } from './LivePill'
 import { LiveStats } from './LiveStats'
 import { TabStrip } from './TabStrip'
 
@@ -46,6 +47,7 @@ export function TopBar() {
         </>
       ) : null}
 
+      <LivePill />
       <ConnectionPill />
     </header>
   )

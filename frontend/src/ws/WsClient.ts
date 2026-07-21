@@ -19,6 +19,8 @@ export class WsClient {
   private status: WsStatus = 'closed'
   private attempt = 0
   private openedAt = 0
+  /** Epoch ms of the next scheduled attempt, 0 when none is pending. */
+  private nextAttemptAt = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null
   private stopped = true
@@ -57,15 +59,41 @@ export class WsClient {
 
   getStatus = (): WsStatus => this.status
 
+  /** Epoch ms of the next retry, or 0 when nothing is scheduled. */
+  getNextAttemptAt = (): number => this.nextAttemptAt
+
+  /**
+   * Retry immediately instead of waiting out the backoff.
+   *
+   * Backoff protects the server from a stampede, not the user from their own
+   * deliberate click — someone who has just restarted the backend should not
+   * have to wait up to 30 seconds to see it come back.
+   */
+  reconnectNow = (): void => {
+    if (this.status === 'open') return
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    this.attempt = 0
+    this.nextAttemptAt = 0
+    this.stopped = false
+    this.connect()
+  }
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
+  private notify(): void {
+    for (const listener of this.listeners) listener()
+  }
+
   private setStatus(next: WsStatus): void {
     if (this.status === next) return
     this.status = next
-    for (const listener of this.listeners) listener()
+    this.notify()
   }
 
   private clearTimers(): void {
@@ -90,6 +118,7 @@ export class WsClient {
 
     socket.onopen = () => {
       this.openedAt = Date.now()
+      this.nextAttemptAt = 0
       this.setStatus('open')
       this.keepaliveTimer = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) socket.send('ping')
@@ -125,6 +154,10 @@ export class WsClient {
     const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** this.attempt)
     const delay = BACKOFF_MIN_MS + Math.random() * (ceiling - BACKOFF_MIN_MS)
     this.attempt += 1
+    this.nextAttemptAt = Date.now() + delay
     this.reconnectTimer = setTimeout(() => this.connect(), delay)
+    // Status is already `closed`, so setStatus would not fire — but the pill
+    // counts down to this timestamp and needs to hear about it.
+    this.notify()
   }
 }

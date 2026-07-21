@@ -1,16 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-import { TERMINAL_JOB_STATES } from '@/api/enums'
-import { qk } from '@/api/keys'
-import { tpFromWs } from '@/api/normalize'
-import type { JobDto } from '@/api/types'
-import type { ChunkBuffer } from '@/domain/chunkMap'
-import type { TpRing } from '@/domain/throughput'
-
+import { applyFrame, resync } from './applyFrame'
 import { WsClient, type WsStatus } from './WsClient'
-import { WsStatusContext } from './context'
-import type { WsFrame } from './protocol'
+import { WsContext, type WsValue } from './context'
 
 interface WsProviderProps {
   children: ReactNode
@@ -18,9 +11,22 @@ interface WsProviderProps {
   selectedJobId: string | null
 }
 
+interface Transport {
+  status: WsStatus
+  nextAttemptAt: number
+}
+
+/**
+ * Owns the app's single socket and publishes its state.
+ *
+ * The merge and re-sync logic lives in `applyFrame.ts` so it can be tested
+ * without React — see `applyFrame.test.ts`, which pins the two corrections
+ * that would otherwise fail silently.
+ */
 export function WsProvider({ children, selectedJobId }: WsProviderProps) {
   const queryClient = useQueryClient()
-  const [status, setStatus] = useState<WsStatus>('closed')
+  const [transport, setTransport] = useState<Transport>({ status: 'closed', nextAttemptAt: 0 })
+  const clientRef = useRef<WsClient | null>(null)
 
   // The socket outlives any particular selection, so the reconnect handler
   // reads the current job through a ref rather than closing over a stale one.
@@ -30,61 +36,15 @@ export function WsProvider({ children, selectedJobId }: WsProviderProps) {
   }, [selectedJobId])
 
   useEffect(() => {
-    const handleFrame = (frame: WsFrame) => {
-      switch (frame.t) {
-        case 'job': {
-          const { id, patch } = frame
-          // Safe as a shallow merge ONLY because JobPatch is typed to the six
-          // fields the hub can emit. If it ever carried `progress`, this would
-          // overwrite a fresh value with a stale one.
-          queryClient.setQueryData<JobDto[]>(qk.jobs, (list) =>
-            list?.map((job) => (job.id === id ? { ...job, ...patch } : job)),
-          )
-          queryClient.setQueryData<JobDto>(qk.job(id), (job) => (job ? { ...job, ...patch } : job))
-          // A terminal state moves the job between queue and history and sets
-          // `finished_at` — neither of which is in the patch.
-          if (patch.state && TERMINAL_JOB_STATES.includes(patch.state)) {
-            void queryClient.invalidateQueries({ queryKey: qk.jobs })
-            void queryClient.invalidateQueries({ queryKey: qk.failures(id) })
-          }
-          break
-        }
+    const client = new WsClient(
+      (frame) => applyFrame(queryClient, frame),
+      () => resync(queryClient, selectedRef.current),
+    )
+    clientRef.current = client
 
-        case 'chunks': {
-          // Dropped when we hold no buffer for this job: selecting it later
-          // fetches the authoritative full set from REST anyway.
-          queryClient.setQueryData<ChunkBuffer>(qk.chunks(frame.job), (buffer) =>
-            buffer?.applyDelta(frame.cells),
-          )
-          break
-        }
-
-        case 'tp': {
-          queryClient.setQueryData<TpRing>(qk.throughput(frame.job), (ring) =>
-            ring?.push(tpFromWs(frame)),
-          )
-          break
-        }
-      }
-    }
-
-    const handleOpen = () => {
-      // Everything that happened while disconnected was missed. `chunks` and
-      // `throughput` are staleTime:Infinity, so they need refetch — invalidate
-      // alone would never refire them.
-      void queryClient.invalidateQueries({ queryKey: qk.jobs })
-      void queryClient.invalidateQueries({ queryKey: qk.ibStatus })
-      const jobId = selectedRef.current
-      if (jobId) {
-        void queryClient.invalidateQueries({ queryKey: qk.job(jobId) })
-        void queryClient.invalidateQueries({ queryKey: qk.failures(jobId) })
-        void queryClient.refetchQueries({ queryKey: qk.chunks(jobId) })
-        void queryClient.refetchQueries({ queryKey: qk.throughput(jobId) })
-      }
-    }
-
-    const client = new WsClient(handleFrame, handleOpen)
-    const unsubscribe = client.subscribe(() => setStatus(client.getStatus()))
+    const unsubscribe = client.subscribe(() =>
+      setTransport({ status: client.getStatus(), nextAttemptAt: client.getNextAttemptAt() }),
+    )
 
     // A backgrounded tab should not make the NAS push frames it will never show.
     const onVisibility = () => {
@@ -97,8 +57,13 @@ export function WsProvider({ children, selectedJobId }: WsProviderProps) {
       document.removeEventListener('visibilitychange', onVisibility)
       unsubscribe()
       client.stop()
+      clientRef.current = null
     }
   }, [queryClient])
 
-  return <WsStatusContext.Provider value={status}>{children}</WsStatusContext.Provider>
+  const reconnectNow = useCallback(() => clientRef.current?.reconnectNow(), [])
+
+  const value = useMemo<WsValue>(() => ({ ...transport, reconnectNow }), [transport, reconnectNow])
+
+  return <WsContext.Provider value={value}>{children}</WsContext.Provider>
 }

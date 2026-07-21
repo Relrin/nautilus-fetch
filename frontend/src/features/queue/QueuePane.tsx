@@ -28,6 +28,7 @@ export function QueuePane({ onNewJob }: QueuePaneProps) {
   )
 
   const { queue, history } = useMemo(() => partitionJobs(data), [data])
+  const hasCached = (data?.length ?? 0) > 0
   const visibleHistory = useMemo(
     () => history.filter((job) => job.created_at > hiddenBefore),
     [history, hiddenBefore],
@@ -63,12 +64,24 @@ export function QueuePane({ onNewJob }: QueuePaneProps) {
       </SectionHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-[14px] pt-[12px] pb-[20px]">
-        {error ? (
+        {/* An outage with jobs still in cache is a different situation from one
+            with nothing to show. Announcing "could not load jobs" above four
+            visible job cards trains the reader to distrust the banner. */}
+        {error && !hasCached ? (
           <EmptyState
             title="Could not load jobs"
             body={error.message}
             icon={<NautilusMark size={26} stroke="var(--ndm-danger)" className="mx-auto" />}
           />
+        ) : null}
+
+        {error && hasCached ? (
+          <div
+            title={error.message}
+            className="border-warning/30 bg-warning/5 text-warning text-105 rounded-10 mb-[10px] border px-[11px] py-[8px] font-mono"
+          >
+            Backend unreachable — showing the last known state, not live data.
+          </div>
         ) : null}
 
         {!error && queue.length === 0 && !isLoading ? (
