@@ -1,8 +1,7 @@
 import type { JobDto } from '@/api/types'
-import { Panel } from '@/components/ndm/Panel'
 import { ProgressBar } from '@/components/ndm/ProgressBar'
 import { jobEtaSeconds, jobFailedFraction, jobProgress, jobTimes } from '@/domain/jobView'
-import { fmtAgo, fmtDuration, fmtInt, fmtPct } from '@/lib/format'
+import { fmtAgo, fmtDuration, fmtPct } from '@/lib/format'
 
 /**
  * The headline percentage.
@@ -11,11 +10,14 @@ import { fmtAgo, fmtDuration, fmtInt, fmtPct } from '@/lib/format'
  * `job.progress`, which the WebSocket hub never emits — rendering the wire
  * field here would pin this number at whatever the first GET returned and it
  * would never move again. This is the most visible place that bug would show.
+ *
+ * Deliberately unpanelled: it is the aside's headline, not one of the bordered
+ * sub-panels below it. The settled/total count lives in the CHUNKS stat tile
+ * rather than being repeated here.
  */
 export function InspectorProgress({ job, now }: { job: JobDto; now: number }) {
   const progress = jobProgress(job)
   const eta = jobEtaSeconds(job, now)
-  const settled = job.done_chunks + job.empty_chunks + job.failed_chunks
 
   const tone =
     job.state === 'paused'
@@ -25,28 +27,16 @@ export function InspectorProgress({ job, now }: { job: JobDto; now: number }) {
         : 'active'
 
   return (
-    <Panel>
-      <div className="flex items-baseline justify-between gap-[8px]">
-        <span className="text-24 text-t1 font-mono leading-none font-semibold tabular-nums">
+    <div>
+      <div className="mb-[6px] flex items-baseline justify-between gap-[8px]">
+        <span className="text-24 text-t1 font-mono leading-none font-bold tabular-nums">
           {job.total_chunks > 0 ? fmtPct(progress) : '—'}
         </span>
         <span className="text-t2 text-105 truncate font-mono">{caption(job, eta, now)}</span>
       </div>
 
-      <ProgressBar
-        value={progress}
-        failed={jobFailedFraction(job)}
-        size="inspector"
-        tone={tone}
-        className="mt-[10px]"
-      />
-
-      <div className="text-t3 text-95 mt-[7px] font-mono">
-        {job.total_chunks > 0
-          ? `${fmtInt(settled)} / ${fmtInt(job.total_chunks)} chunks settled`
-          : 'waiting for the planner'}
-      </div>
-    </Panel>
+      <ProgressBar value={progress} failed={jobFailedFraction(job)} size="inspector" tone={tone} />
+    </div>
   )
 }
 

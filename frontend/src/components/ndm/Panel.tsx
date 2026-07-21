@@ -13,10 +13,19 @@ interface PanelProps {
   /** Red-tinted variant for the failures panel. */
   tone?: 'default' | 'danger'
   className?: string
+  /** Override the header's bottom margin; OUTPUT sits a pixel tighter. */
+  headerClassName?: string
 }
 
 /** The inspector's sub-panel: a bordered block on the panel surface. */
-export function Panel({ children, title, caption, tone = 'default', className }: PanelProps) {
+export function Panel({
+  children,
+  title,
+  caption,
+  tone = 'default',
+  className,
+  headerClassName,
+}: PanelProps) {
   return (
     <section
       className={cn(
@@ -26,13 +35,15 @@ export function Panel({ children, title, caption, tone = 'default', className }:
       )}
     >
       {(title || caption) && (
-        <header className="mb-[8px] flex items-baseline justify-between gap-[8px]">
+        <header
+          className={cn('mb-[8px] flex items-baseline justify-between gap-[8px]', headerClassName)}
+        >
           {title ? (
             <Eyebrow className={tone === 'danger' ? 'text-danger' : ''}>{title}</Eyebrow>
           ) : (
             <span />
           )}
-          {caption ? <span className="text-t3 text-9 font-mono">{caption}</span> : null}
+          {caption ? <span className="text-t3 text-95 font-mono">{caption}</span> : null}
         </header>
       )}
       {children}

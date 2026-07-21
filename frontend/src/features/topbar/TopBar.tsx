@@ -21,7 +21,7 @@ export function TopBar() {
         <span className="text-14 font-semibold tracking-[0.3px]">
           NAUTILUS <span className="text-t2 font-normal">DATA</span>
         </span>
-        {health.data ? <Chip>{`v${health.data.version}`}</Chip> : null}
+        {health.data ? <Chip className="text-95 px-[6px]">{`v${health.data.version}`}</Chip> : null}
       </div>
 
       <TabStrip />

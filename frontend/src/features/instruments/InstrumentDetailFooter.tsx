@@ -45,15 +45,13 @@ export function InstrumentDetailFooter({ conId, onQueueJob }: InstrumentDetailFo
           title={head ? undefined : 'Learned when a job first plans this instrument'}
         />
         <Field label="CURRENCY" value={data.currency ?? '—'} />
-        <div className="col-span-2">
-          <Field
-            label="SESSIONS"
-            value={formatSessions(
-              details?.liquidHours ?? details?.tradingHours,
-              details?.timeZoneId,
-            )}
-          />
-        </div>
+        {/* Half-width and wrapping: session strings run long, and truncating
+            them to one line hid the close time, which is the half people read. */}
+        <Field
+          label="SESSIONS"
+          multiline
+          value={formatSessions(details?.liquidHours ?? details?.tradingHours, details?.timeZoneId)}
+        />
       </div>
 
       <div className="mb-[10px] flex items-center gap-[5px]">
@@ -73,15 +71,25 @@ function Field({
   label,
   value,
   title,
+  multiline = false,
 }: {
   label: string
   value: string
   title?: string | undefined
+  multiline?: boolean
 }) {
   return (
     <div title={title}>
       <div className="text-t3 text-85 mb-[2px] font-semibold tracking-[1px]">{label}</div>
-      <div className="text-115 text-t1 truncate font-mono">{value}</div>
+      <div
+        className={
+          multiline
+            ? 'text-10 text-t1 font-mono leading-[1.35]'
+            : 'text-115 text-t1 truncate font-mono'
+        }
+      >
+        {value}
+      </div>
     </div>
   )
 }

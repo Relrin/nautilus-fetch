@@ -36,24 +36,24 @@ export function ChunkMapPanel({ buffer, recorder }: ChunkMapPanelProps) {
   return (
     <Panel title="CHUNK MAP" caption={caption}>
       {cells.length === 0 ? (
-        <div className="text-t3 text-95 py-[6px] font-mono">
+        <div className="text-t3 text-95 mb-[9px] py-[6px] font-mono">
           {recorder ? 'no segments flushed yet' : 'no chunks planned yet'}
         </div>
       ) : (
-        <div className="flex flex-wrap gap-[3px]">
+        <div className="mb-[9px] flex flex-wrap gap-[3px]">
           {cells.map((state, index) => (
             <span
               key={index}
-              className={cn('rounded-[2px]', CELL_CLASS[state])}
+              className={cn('rounded-[3px]', CELL_CLASS[state])}
               style={{ width: 13, height: 13 }}
             />
           ))}
         </div>
       )}
 
-      <div className="text-t3 text-9 mt-[10px] flex flex-wrap items-center gap-[10px] font-mono">
+      <div className="text-t2 text-95 flex flex-wrap items-center gap-[12px]">
         {LEGEND.map(({ state, label }) => (
-          <span key={state} className="flex items-center gap-[4px]">
+          <span key={state} className="flex items-center gap-[5px]">
             <span
               className={cn('rounded-[2px]', CELL_CLASS[state])}
               style={{ width: 8, height: 8 }}

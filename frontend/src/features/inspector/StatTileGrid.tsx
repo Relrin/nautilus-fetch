@@ -17,7 +17,7 @@ export function StatTileGrid({ job, ring, now }: StatTileGridProps) {
   const settled = job.done_chunks + job.empty_chunks + job.failed_chunks
 
   return (
-    <div className="grid grid-cols-3 gap-[6px]">
+    <div className="grid grid-cols-3 gap-[9px]">
       {recorder ? (
         <>
           <StatTile

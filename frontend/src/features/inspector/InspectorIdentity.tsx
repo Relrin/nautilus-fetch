@@ -13,21 +13,24 @@ export function InspectorIdentity({ job }: { job: JobDto }) {
 
   return (
     <section>
-      <div className="flex items-start gap-[8px]">
-        <span className="text-14 text-t1 min-w-0 flex-1 font-mono leading-[1.35] font-semibold break-words">
+      <div className="flex items-center gap-[8px]">
+        <span
+          className="text-13 text-t1 min-w-0 flex-1 truncate font-mono font-bold"
+          title={jobTitle(job)}
+        >
           {jobTitle(job)}
         </span>
         <NdmBadge label={badge.label} className={badge.className} />
       </div>
 
-      <div className="text-t2 text-105 mt-[6px] font-mono">
+      <div className="text-t2 text-105 mt-[5px] font-mono">
         {recorder
           ? // A recorder has no end: `range_end` is null and stays null.
             `capturing since ${fmtDateTime(times.startedAt ?? times.rangeStart)}`
           : `${fmtDate(times.rangeStart)} → ${fmtDate(times.rangeEnd)}`}
       </div>
 
-      <div className="mt-[9px] flex flex-wrap gap-[5px]">
+      <div className="mt-[8px] flex flex-wrap gap-[5px]">
         <Chip tone="config">{kindLabel(job.data_type, job.params.bar_size)}</Chip>
         {job.params.what_to_show && <Chip tone="config">{job.params.what_to_show}</Chip>}
         {recorder && job.params.depth_levels !== undefined && (

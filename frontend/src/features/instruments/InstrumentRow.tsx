@@ -38,7 +38,7 @@ export function InstrumentRow({ row, selected, onSelect }: InstrumentRowProps) {
         </span>
         {!row.cached && (
           <span
-            className="text-85 text-t3 border-b2 rounded-4 border px-[4px] py-[1px] font-mono"
+            className="text-85 text-t3 border-b2 rounded-4 border px-[4px] py-[1px] font-mono font-bold tracking-[0.5px]"
             title="Found via IB search; not yet cached on the server"
           >
             NEW

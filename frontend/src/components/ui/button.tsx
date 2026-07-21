@@ -35,7 +35,7 @@ const buttonVariants = cva(
         sm: "text-115 h-[28px] rounded-7 px-[12px]",
         md: "text-115 h-[30px] rounded-7 px-[14px]",
         xs: "text-105 h-[24px] rounded-6 px-[9px]",
-        tiny: "text-10 h-[23px] rounded-6 px-[9px]",
+        tiny: "text-10 h-[23px] rounded-6 gap-[5px] px-[9px]",
         block: "text-115 h-[30px] rounded-7 w-full px-[14px]",
         blockSm: "text-105 h-[27px] rounded-6 w-full px-[10px] font-semibold",
         icon: "size-[24px] rounded-6",

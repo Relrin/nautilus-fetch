@@ -27,7 +27,7 @@ export function FailuresPanel({ job }: { job: JobDto }) {
       {isLoading && shown.length === 0 ? (
         <div className="text-t3 text-98 font-mono">loading…</div>
       ) : (
-        <ul className="flex flex-col gap-[3px]">
+        <ul className="mb-[10px] flex flex-col gap-[5px] leading-[1.4]">
           {shown.map((failure) => (
             <li
               key={failure.chunk_id}
@@ -47,13 +47,12 @@ export function FailuresPanel({ job }: { job: JobDto }) {
       )}
 
       {hidden > 0 && (
-        <div className="text-t3 text-98 mt-[5px] font-mono">{`+ ${hidden} more…`}</div>
+        <div className="text-t3 text-95 mt-[-5px] mb-[10px] font-mono">{`+ ${hidden} more…`}</div>
       )}
 
       <Button
         variant="danger"
         size="blockSm"
-        className="mt-[9px]"
         disabled={retry.isPending}
         title="Return every failed chunk on this job to the queue"
         onClick={() =>

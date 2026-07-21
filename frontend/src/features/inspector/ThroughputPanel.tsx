@@ -16,7 +16,6 @@ const FLAT = Array.from({ length: TP_BARS }, () => 2)
  */
 export function ThroughputPanel({ ring }: { ring: TpRing | undefined }) {
   const heights = ring?.barHeights() ?? FLAT
-  const latest = ring?.latest() ?? null
   const peak = ring?.peakBytesPerSec() ?? 0
   const hasData = ring?.hasData() ?? false
 
@@ -32,22 +31,13 @@ export function ThroughputPanel({ ring }: { ring: TpRing | undefined }) {
           <div
             key={index}
             className={cn(
-              'flex-1 rounded-[1px] transition-[height] duration-300 ease-out',
+              'flex-1 rounded-[1.5px] transition-[height] duration-300 ease-out',
               // The newest reading is the one the eye should land on.
               index === heights.length - 1 && hasData ? 'bg-accent' : 'bg-acc-40',
             )}
             style={{ height: `${height}px` }}
           />
         ))}
-      </div>
-
-      <div className="text-t2 text-95 mt-[7px] flex items-baseline justify-between font-mono">
-        <span className="text-t1b">{fmtRate(latest?.bytesPerSec)}</span>
-        {/* `inflight` is REST-only — the `tp` frame does not carry it, so a
-            live job shows it only until the next WebSocket sample lands. */}
-        {latest?.inflight !== null && latest?.inflight !== undefined && (
-          <span>{`${latest.inflight} in flight`}</span>
-        )}
       </div>
     </Panel>
   )

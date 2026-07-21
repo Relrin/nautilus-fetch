@@ -53,11 +53,12 @@ export function HistoryRow({ job, selected, onSelect }: HistoryRowProps) {
       >
         {badge.glyph}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="text-115 text-t1b block truncate font-mono font-semibold">
-          {jobTitle(job)}
-        </span>
-        <span className="text-10 text-t2 block truncate font-mono">{meta}</span>
+      {/* One line, not two: the title sizes to its content and the meta run
+          takes the remaining width and ellipsises. Stacking them doubled the
+          row height and made the history list scan like a second queue. */}
+      <span className="text-115 text-t1b flex-none font-mono font-semibold">{jobTitle(job)}</span>
+      <span className="text-10 text-t2 min-w-0 flex-1 truncate font-mono" title={meta}>
+        {meta}
       </span>
 
       {job.failed_chunks > 0 && <Chip tone="danger">{`${job.failed_chunks} failed`}</Chip>}

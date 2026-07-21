@@ -43,7 +43,7 @@ export function EmptyState({
       {icon}
       <div className="text-13 mt-[10px] mb-[4px] font-semibold">{title}</div>
       {body ? (
-        <div className="text-t2 text-115 mx-auto mb-[16px] max-w-[430px] leading-[1.5]">{body}</div>
+        <div className="text-t2 text-115 mx-auto mb-[16px] max-w-[400px] leading-[1.5]">{body}</div>
       ) : null}
       {action}
     </div>

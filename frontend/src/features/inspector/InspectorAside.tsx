@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react'
+
 import { useChunks, useJob, useThroughput } from '@/api/queries'
 import { PaneEmptyState } from '@/components/ndm/EmptyState'
 import { Eyebrow } from '@/components/ndm/Eyebrow'
@@ -34,13 +36,22 @@ export function InspectorAside() {
 
   return (
     <aside className="border-b1 bg-bar flex min-h-0 flex-col border-l">
-      <SectionHeader>
+      <SectionHeader className="gap-[8px]">
         <Eyebrow variant="pane">INSPECTOR</Eyebrow>
+        <div className="flex-1" />
+        {job ? (
+          <span
+            className="bg-card border-b2 text-t3 text-95 rounded-5 border px-[7px] py-[2px] font-mono"
+            title={job.id}
+          >
+            {job.id}
+          </span>
+        ) : null}
       </SectionHeader>
 
       {!selectedJobId && (
         <PaneEmptyState
-          icon={<NautilusMark size={22} className="opacity-70" />}
+          icon={<Search size={22} strokeWidth={1.6} className="text-b3" />}
           title="No job selected"
           body="Pick a job to see chunk-level progress, throughput and failures."
         />
@@ -55,7 +66,7 @@ export function InspectorAside() {
       )}
 
       {job && (
-        <div className="flex min-h-0 flex-1 flex-col gap-[10px] overflow-y-auto px-[14px] pt-[12px] pb-[20px]">
+        <div className="flex min-h-0 flex-1 flex-col gap-[12px] overflow-y-auto px-[14px] pt-[13px] pb-[20px]">
           <InspectorIdentity job={job} />
 
           {isRecorder(job) ? (

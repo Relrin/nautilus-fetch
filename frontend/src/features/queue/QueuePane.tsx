@@ -88,11 +88,24 @@ export function QueuePane({ onNewJob }: QueuePaneProps) {
           <EmptyState
             icon={<NautilusMark size={26} className="mx-auto opacity-85" />}
             title="No dataset jobs yet"
-            body="Pick an instrument on the left, choose data kind and range, and the fetcher will pull history from IB Gateway chunk by chunk into the parquet catalog."
+            body="Pick an instrument on the left, choose data kind, range and cadence, and the fetcher will pull history from IB Gateway chunk by chunk into the parquet catalog."
             action={
-              <Button size="md" onClick={onNewJob}>
-                Create your first job
-              </Button>
+              <>
+                <div className="text-t1b text-10 mb-[18px] flex justify-center gap-[18px] font-mono">
+                  <span>
+                    <span className="text-accent">1</span> pick instruments
+                  </span>
+                  <span>
+                    <span className="text-accent">2</span> kind &amp; range
+                  </span>
+                  <span>
+                    <span className="text-accent">3</span> queue it
+                  </span>
+                </div>
+                <Button size="md" onClick={onNewJob}>
+                  Create your first job
+                </Button>
+              </>
             }
             className="mb-[16px]"
           />
@@ -117,6 +130,7 @@ export function QueuePane({ onNewJob }: QueuePaneProps) {
             <Button
               variant="outline"
               size="xs"
+              className="text-t2 hover:text-t1 px-[10px] font-normal"
               onClick={hideHistory}
               // There is no delete endpoint. Calling this "Clear" would imply
               // data loss that does not happen.

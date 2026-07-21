@@ -7,7 +7,7 @@ export function JobCardStats({ job }: { job: JobDto }) {
   // A queued job has nothing to report yet; the mockup shows its position.
   if (job.state === 'queued') {
     return (
-      <div className="text-t2 text-105 mt-[8px] font-mono">
+      <div className="text-t3 text-105 mt-[8px] font-mono">
         {`waiting for a worker slot · ${fmtInt(job.total_chunks)} chunks planned`}
       </div>
     )
@@ -38,8 +38,9 @@ export function JobCardStats({ job }: { job: JobDto }) {
       )}
       <span>{fmtBytes(job.bytes_written)}</span>
       <span>{`${fmtRows(job.rows_written)} rows`}</span>
-      <div className="flex-1" />
-      {eta !== null && <span className="text-t1b flex-none">{`ETA ${fmtDuration(eta)}`}</span>}
+      {/* Inline with the run, not right-aligned: the mockup reserves the far
+          right for a current-chunk readout we have no per-card source for. */}
+      {eta !== null && <span>{`ETA ${fmtDuration(eta)}`}</span>}
     </div>
   )
 }

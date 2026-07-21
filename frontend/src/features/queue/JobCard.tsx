@@ -68,10 +68,18 @@ export function JobCard({ job, selected, onSelect }: JobCardProps) {
         selected ? 'border-acc-45' : 'border-b1',
       )}
     >
-      <div className="flex items-center gap-[10px]">
+      <div className="flex items-center gap-[9px]">
         <StatusDot color={DOT_COLOR[badge.label] ?? 'var(--ndm-t3)'} pulse={badge.pulse} />
         <NdmBadge label={badge.label} className={badge.className} />
         <span className="text-125 text-t1 truncate font-mono font-semibold">{jobTitle(job)}</span>
+
+        {/* The mockup's note slot. `schedule_id` is the one note we can source
+            truthfully — it marks a job a recurring rule created, not a person. */}
+        {job.schedule_id !== null && (
+          <Chip tone="muted" title="Created by a schedule">
+            scheduled
+          </Chip>
+        )}
 
         <div className="flex-1" />
 
