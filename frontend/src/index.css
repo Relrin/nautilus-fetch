@@ -93,6 +93,8 @@
   --animate-ndm-toast: ndmToast 0.2s ease;
   --animate-ndm-pop: ndmPop 0.18s ease;
   --animate-ndm-fade: ndmFade 0.18s ease;
+  /* DEPTH recorders are open-ended, so their bar sweeps instead of filling. */
+  --animate-ndm-sweep: ndmSweep 1.8s ease-in-out infinite;
 }
 
 @theme inline {
@@ -255,5 +257,13 @@
   }
   to {
     opacity: 1;
+  }
+}
+@keyframes ndmSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
   }
 }
