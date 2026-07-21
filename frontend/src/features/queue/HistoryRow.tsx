@@ -1,0 +1,96 @@
+import { RotateCw } from 'lucide-react'
+
+import type { JobDto } from '@/api/types'
+import { useRetryFailed } from '@/api/mutations'
+import { Chip } from '@/components/ndm/Chip'
+import { Button } from '@/components/ui/button'
+import { jobBadge, jobElapsedSeconds, jobTimes, jobTitle } from '@/domain/jobView'
+import { kindLabel } from '@/domain/kind'
+import { cn } from '@/lib/cn'
+import { fmtAgo, fmtBytes, fmtDate, fmtDuration } from '@/lib/format'
+import { useToasts } from '@/state/toastsContext'
+
+const GLYPH_COLOR: Record<string, string> = {
+  DONE: 'text-success',
+  ISSUES: 'text-warning',
+  CANCELED: 'text-t3',
+  FAILED: 'text-danger',
+}
+
+interface HistoryRowProps {
+  job: JobDto
+  selected: boolean
+  onSelect: () => void
+}
+
+export function HistoryRow({ job, selected, onSelect }: HistoryRowProps) {
+  const badge = jobBadge(job)
+  const times = jobTimes(job)
+  const retry = useRetryFailed()
+  const { push } = useToasts()
+
+  const meta = [
+    `${fmtDate(times.rangeStart)} → ${fmtDate(times.rangeEnd)}`,
+    `parquet/${kindLabel(job.data_type, job.params.bar_size)}`,
+    fmtBytes(job.bytes_written),
+    fmtDuration(jobElapsedSeconds(job)),
+    fmtAgo(times.finishedAt ?? times.createdAt),
+  ].join(' · ')
+
+  return (
+    <div
+      onClick={onSelect}
+      className={cn(
+        'rounded-8 hover:bg-panel flex cursor-pointer items-center gap-[10px] px-[10px] py-[8px]',
+        selected && 'bg-panel',
+      )}
+    >
+      <span
+        className={cn(
+          'text-12 w-[14px] flex-none text-center font-mono font-bold',
+          GLYPH_COLOR[badge.label],
+        )}
+      >
+        {badge.glyph}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="text-115 text-t1b block truncate font-mono font-semibold">
+          {jobTitle(job)}
+        </span>
+        <span className="text-10 text-t2 block truncate font-mono">{meta}</span>
+      </span>
+
+      {job.failed_chunks > 0 && <Chip tone="danger">{`${job.failed_chunks} failed`}</Chip>}
+
+      {job.failed_chunks > 0 && (
+        <Button
+          variant="danger"
+          size="tiny"
+          title="Requeue the failed chunks on this job"
+          onClick={(event) => {
+            event.stopPropagation()
+            retry.mutate(job.id, {
+              onSuccess: () => push(`${job.failed_chunks} chunks returned to the queue`),
+              onError: (error) => push(`Could not retry: ${error.message}`, 'danger'),
+            })
+          }}
+        >
+          Retry failed
+        </Button>
+      )}
+
+      <Button
+        variant="outline"
+        size="tiny"
+        // Re-run needs con_ids, which job_dto does not carry. Phase 7 opens the
+        // modal prefilled from `symbols`; until then it would silently do nothing.
+        disabled
+        title="Re-run opens the new-job form — available once the job modal lands"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <RotateCw size={10} strokeWidth={2.4} />
+        Re-run
+      </Button>
+    </div>
+  )
+}
