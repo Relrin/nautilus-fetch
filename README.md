@@ -28,6 +28,7 @@ in order to use for backtests & running along with the [Nautilus Trader](https:/
 ## Prerequisites
 - Python 3.13
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 22.12+
 
 ## Running locally (development)
 
@@ -43,6 +44,20 @@ uv run uvicorn nautilus_fetch.main:app --reload --port 8000
 Configuration via environment or `.env` — see [.env.example](.env.example).
 Defaults: paper gateway on `127.0.0.1:4002`, SQLite state, data under
 `backend/data/`. Set `DATABASE_URL=postgresql+asyncpg://...` for PostgreSQL.
+
+### Using the frontend
+With the backend running, in a second terminal:
+```sh
+cd frontend
+npm ci
+npm run dev                          # :5173, proxies /api and /ws to 127.0.0.1:8000
+```
+
+`npm run build` emits into `backend/static/`, which the backend serves at `/`
+when present — so a build is reachable on `:8000` with no Vite in play.
+
+If you use [`just`](https://github.com/casey/just): `just dev`, `just web`,
+`just web-check`, and `just check` for everything at once.
 
 ## Docker
 The entire application (backend + frontend) can be made into the regular container and deployed to 

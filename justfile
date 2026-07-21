@@ -13,6 +13,26 @@ test-live:
 sync:
     cd backend; uv sync --all-extras
 
+# Frontend dev server on :5173, proxying /api and /ws to 127.0.0.1:8000
+web:
+    cd frontend; npm run dev
+
+web-install:
+    cd frontend; npm ci
+
+# Production bundle into backend/static, where main.py mounts it.
+web-build:
+    cd frontend; npm run build
+
+web-check:
+    cd frontend; npm run lint
+    cd frontend; npm run typecheck
+    cd frontend; npm test
+    cd frontend; npm run format:check
+    cd frontend; npm run build
+
+check: test web-check
+
 docker-build:
     docker compose build
 

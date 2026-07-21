@@ -1,0 +1,31 @@
+# Dependency trees — both stages install from their lockfiles instead.
+frontend/node_modules
+backend/.venv
+
+# Build output. The image builds the SPA itself; copying a local build in would
+# ship whatever happened to be on the developer's disk.
+backend/static
+frontend/dist
+
+# Local state and downloaded data — these are volumes at runtime.
+backend/data
+deploy-data
+*.sqlite
+*.sqlite-*
+
+# Caches
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+**/.tmp
+
+# Not part of the image
+.git
+.github
+.idea
+.vscode
+.claude
+plans
+*.md
+!backend/README.md
