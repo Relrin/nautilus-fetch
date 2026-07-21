@@ -202,14 +202,34 @@
     width: 10px;
     height: 10px;
   }
-  /* The 3px page-colored border fakes inset padding around the thumb. */
+  /* Deliberately not painted: the surface behind the scrollbar should show
+     through, whatever it is. */
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  /*
+   * The 3px border fakes inset padding around the thumb — but it is
+   * TRANSPARENT with `background-clip: padding-box`, not the page colour the
+   * mockup hardcodes.
+   *
+   * A fixed `var(--ndm-page)` ring only blends on page-coloured surfaces. The
+   * asides are `--ndm-bar` and both modals scroll on `--ndm-card`, where it
+   * painted a visibly dark channel down the edge of the panel. Clipping the
+   * background instead lets the inset take on whatever is actually behind it,
+   * which renders identically to the mockup on `--ndm-page` and correctly
+   * everywhere else.
+   */
+  /* `background-color`, not the `background` shorthand: mixing the shorthand
+     with `background-clip` makes the browser expand it into longhands, and the
+     `var()` does not survive that expansion — the thumb loses its colour. */
   ::-webkit-scrollbar-thumb {
-    background: var(--ndm-b2);
-    border: 3px solid var(--ndm-page);
+    background-color: var(--ndm-b2);
+    background-clip: padding-box;
+    border: 3px solid transparent;
     border-radius: 6px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--ndm-b3);
+    background-color: var(--ndm-b3);
   }
 }
 
