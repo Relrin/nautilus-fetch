@@ -17,6 +17,7 @@ const job = (overrides: Partial<JobDto> = {}): JobDto => ({
   data_type: 'BARS',
   schedule_id: null,
   symbols: ['AAPL.SMART'],
+  con_ids: [265598],
   params: { bar_size: '1 min', what_to_show: 'TRADES', use_rth: true },
   workers: 4,
   max_retries: 3,

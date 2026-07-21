@@ -86,17 +86,21 @@ async def symbols_of(db: AsyncEngine, job_id: str) -> list[dict[str, Any]]:
         return [dict(row) for row in result.mappings()]
 
 
-async def symbols_for(db: AsyncEngine, job_ids: list[str]) -> dict[str, list[str]]:
-    """Instrument ids per job in one query — the list endpoint must not go N+1."""
+async def symbols_for(db: AsyncEngine, job_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Symbols per job in one query — the list endpoint must not go N+1.
+
+    Returns con_id alongside instrument_id: the UI needs con_ids to re-run a
+    job, and they cannot be recovered from the instrument-id strings.
+    """
     if not job_ids:
         return {}
     async with db.connect() as conn:
         result = await conn.execute(
-            sa.select(job_symbols.c.job_id, job_symbols.c.instrument_id)
+            sa.select(job_symbols.c.job_id, job_symbols.c.instrument_id, job_symbols.c.con_id)
             .where(job_symbols.c.job_id.in_(job_ids))
             .order_by(job_symbols.c.job_id, job_symbols.c.ordinal)
         )
-        grouped: dict[str, list[str]] = {job_id: [] for job_id in job_ids}
+        grouped: dict[str, list[dict[str, Any]]] = {job_id: [] for job_id in job_ids}
         for row in result:
-            grouped[row.job_id].append(row.instrument_id)
+            grouped[row.job_id].append({"instrument_id": row.instrument_id, "con_id": row.con_id})
     return grouped

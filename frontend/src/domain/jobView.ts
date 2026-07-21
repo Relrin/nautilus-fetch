@@ -71,6 +71,18 @@ export function jobBadge(job: JobDto): JobBadge {
   }
 }
 
+/**
+ * The job's instrument ids, tolerating a server that predates them.
+ *
+ * `con_ids` was added to `job_dto` for the re-run flow. The wire type declares
+ * it required, but a browser holding a new bundle against a not-yet-restarted
+ * backend gets `undefined` — and reading `.length` off that throws during
+ * render, which unmounts the entire tree. A blank dashboard is a far worse
+ * failure than a disabled Re-run button, so absence is handled rather than
+ * assumed away.
+ */
+export const jobConIds = (job: JobDto): number[] => job.con_ids ?? []
+
 /** Card title. Falls back to `name` for jobs with no recorded symbols. */
 export function jobTitle(job: JobDto): string {
   return job.symbols.length > 0 ? job.symbols.join(' · ') : job.name

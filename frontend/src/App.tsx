@@ -1,9 +1,15 @@
+import { useCallback, useState } from 'react'
+
+import { useInstruments } from '@/api/queries'
+import type { JobDto } from '@/api/types'
 import { ToastHost } from '@/components/ndm/ToastHost'
+import { jobConIds } from '@/domain/jobView'
+import { isBarSize } from '@/domain/kind'
 import { InspectorAside } from '@/features/inspector/InspectorAside'
 import { InstrumentsAside } from '@/features/instruments/InstrumentsAside'
+import { NewJobModal, type NewJobPrefill } from '@/features/newjob/NewJobModal'
 import { QueuePane } from '@/features/queue/QueuePane'
 import { TopBar } from '@/features/topbar/TopBar'
-import { useToasts } from '@/state/toastsContext'
 import { SelectionProvider } from '@/state/selection'
 import { useSelection } from '@/state/selectionContext'
 import { ToastProvider } from '@/state/toasts'
@@ -36,14 +42,57 @@ function Shell() {
 }
 
 function QueuePage() {
-  const { push } = useToasts()
-  const notYet = () => push('The new-job form arrives in the next phase', 'neutral')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [prefill, setPrefill] = useState<NewJobPrefill | null>(null)
+  const { data: instruments } = useInstruments('', null)
+
+  const openBlank = useCallback(() => {
+    setPrefill(null)
+    setModalOpen(true)
+  }, [])
+
+  const openForInstrument = useCallback(
+    (conId: number) => {
+      const match = instruments?.find((row) => row.con_id === conId)
+      setPrefill({
+        picked: [{ conId, symbol: match?.symbol ?? String(conId) }],
+        state: { conIds: [conId] },
+      })
+      setModalOpen(true)
+    },
+    [instruments],
+  )
+
+  const openForRerun = useCallback((job: JobDto) => {
+    const conIds = jobConIds(job)
+    setPrefill({
+      picked: conIds.map((conId, index) => ({
+        conId,
+        // `symbols` are instrument ids like `AAPL.SMART`; the ticker is enough
+        // for a chip and the two arrays share job_symbols' ordinal ordering.
+        symbol: job.symbols[index]?.split('.')[0] ?? String(conId),
+      })),
+      state: {
+        conIds,
+        dataType: job.data_type,
+        barSize: job.params.bar_size && isBarSize(job.params.bar_size) ? job.params.bar_size : null,
+        ...(job.params.what_to_show ? { whatToShow: job.params.what_to_show } : {}),
+        ...(job.params.use_rth === undefined ? {} : { useRth: job.params.use_rth }),
+        workers: job.workers,
+        maxRetries: job.max_retries,
+        ...(job.range_start ? { from: job.range_start.slice(0, 10) } : {}),
+        ...(job.range_end ? { to: job.range_end.slice(0, 10) } : {}),
+      },
+    })
+    setModalOpen(true)
+  }, [])
 
   return (
     <div className="grid min-h-0 grid-cols-[292px_minmax(0,1fr)_344px]">
-      <InstrumentsAside onQueueJob={notYet} />
-      <QueuePane onNewJob={notYet} />
+      <InstrumentsAside onQueueJob={openForInstrument} />
+      <QueuePane onNewJob={openBlank} onRerun={openForRerun} />
       <InspectorAside />
+      {modalOpen && <NewJobModal onClose={() => setModalOpen(false)} prefill={prefill} />}
     </div>
   )
 }

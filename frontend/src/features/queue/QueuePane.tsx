@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { useJobs } from '@/api/queries'
+import type { JobDto } from '@/api/types'
 import { Chip } from '@/components/ndm/Chip'
 import { EmptyState } from '@/components/ndm/EmptyState'
 import { NautilusMark } from '@/components/ndm/NautilusMark'
@@ -18,9 +19,10 @@ const HIDDEN_BEFORE_KEY = 'ndm.history.hiddenBefore'
 
 interface QueuePaneProps {
   onNewJob: () => void
+  onRerun: (job: JobDto) => void
 }
 
-export function QueuePane({ onNewJob }: QueuePaneProps) {
+export function QueuePane({ onNewJob, onRerun }: QueuePaneProps) {
   const { data, isLoading, error } = useJobs()
   const { selectedJobId, selectJob } = useSelection()
   const [hiddenBefore, setHiddenBefore] = useState<number>(() =>
@@ -151,6 +153,7 @@ export function QueuePane({ onNewJob }: QueuePaneProps) {
                 job={job}
                 selected={job.id === selectedJobId}
                 onSelect={() => selectJob(job.id)}
+                onRerun={onRerun}
               />
             ))}
           </div>

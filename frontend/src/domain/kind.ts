@@ -52,6 +52,27 @@ export function kindLabel(dataType: DataType, barSize?: string | null): string {
 export const formatChipLabel = (dataType: DataType, params: JobParams): string =>
   `parquet / ${kindLabel(dataType, params.bar_size)}`
 
+/**
+ * The data-kind select's value encoding: `ticks` | `quotes` | `depth` |
+ * `bars:<size>`. One string keeps `data_type` and `bar_size` from drifting
+ * apart in form state.
+ */
+export type KindValue = string
+
+export const kindValueOf = (dataType: DataType, barSize: BarSize | null): KindValue => {
+  if (dataType === 'TRADE_TICKS') return 'ticks'
+  if (dataType === 'QUOTE_TICKS') return 'quotes'
+  if (dataType === 'DEPTH') return 'depth'
+  return `bars:${barSize ?? '1 min'}`
+}
+
+export function parseKindValue(value: KindValue): { dataType: DataType; barSize: BarSize | null } {
+  if (value === 'ticks') return { dataType: 'TRADE_TICKS', barSize: null }
+  if (value === 'quotes') return { dataType: 'QUOTE_TICKS', barSize: null }
+  if (value === 'depth') return { dataType: 'DEPTH', barSize: null }
+  return { dataType: 'BARS', barSize: value.slice('bars:'.length) as BarSize }
+}
+
 export const isBarSize = (value: string): value is BarSize =>
   (BAR_SIZES as readonly string[]).includes(value)
 

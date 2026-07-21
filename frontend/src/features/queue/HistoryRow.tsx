@@ -4,7 +4,7 @@ import type { JobDto } from '@/api/types'
 import { useRetryFailed } from '@/api/mutations'
 import { Chip } from '@/components/ndm/Chip'
 import { Button } from '@/components/ui/button'
-import { jobBadge, jobElapsedSeconds, jobTimes, jobTitle } from '@/domain/jobView'
+import { jobBadge, jobConIds, jobElapsedSeconds, jobTimes, jobTitle } from '@/domain/jobView'
 import { kindLabel } from '@/domain/kind'
 import { cn } from '@/lib/cn'
 import { fmtAgo, fmtBytes, fmtDate, fmtDuration } from '@/lib/format'
@@ -21,9 +21,10 @@ interface HistoryRowProps {
   job: JobDto
   selected: boolean
   onSelect: () => void
+  onRerun: (job: JobDto) => void
 }
 
-export function HistoryRow({ job, selected, onSelect }: HistoryRowProps) {
+export function HistoryRow({ job, selected, onSelect, onRerun }: HistoryRowProps) {
   const badge = jobBadge(job)
   const times = jobTimes(job)
   const retry = useRetryFailed()
@@ -83,11 +84,18 @@ export function HistoryRow({ job, selected, onSelect }: HistoryRowProps) {
       <Button
         variant="outline"
         size="tiny"
-        // Re-run needs con_ids, which job_dto does not carry. Phase 7 opens the
-        // modal prefilled from `symbols`; until then it would silently do nothing.
-        disabled
-        title="Re-run opens the new-job form — available once the job modal lands"
-        onClick={(event) => event.stopPropagation()}
+        // `con_ids` was added to job_dto for exactly this: they cannot be
+        // recovered from the `symbols` strings.
+        disabled={jobConIds(job).length === 0}
+        title={
+          jobConIds(job).length === 0
+            ? 'This job predates instrument tracking, so it cannot be re-run'
+            : 'Open the new-job form prefilled from this job'
+        }
+        onClick={(event) => {
+          event.stopPropagation()
+          onRerun(job)
+        }}
       >
         <RotateCw size={10} strokeWidth={2.4} />
         Re-run

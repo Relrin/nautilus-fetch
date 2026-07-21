@@ -123,6 +123,8 @@ export interface JobDto {
   schedule_id: string | null
   /** Added in Phase 0; empty for jobs created before that. */
   symbols: string[]
+  /** What "re-run" posts back. Not derivable from `symbols`. */
+  con_ids: number[]
   params: JobParams
   workers: number
   max_retries: number

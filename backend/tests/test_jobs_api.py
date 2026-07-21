@@ -62,6 +62,9 @@ def test_job_lifecycle_via_api(tmp_settings):
         assert job["params"]["bar_size"] == "1 min"
         # the dashboard titles cards on these, so every job endpoint must carry them
         assert job["symbols"] == ["AAPL.NASDAQ"]
+        # con_ids are what "re-run this job" posts back; they cannot be
+        # recovered from the instrument-id strings, so they must ship too
+        assert job["con_ids"] == JOB_REQUEST["con_ids"]
         assert job["schedule_id"] is None
 
         final = poll_job(client, job["id"])
@@ -73,6 +76,8 @@ def test_job_lifecycle_via_api(tmp_settings):
         listed = client.get("/api/jobs").json()
         assert [item["id"] for item in listed] == [job["id"]]
         assert listed[0]["symbols"] == ["AAPL.NASDAQ"]
+        # the batched list path builds these separately from the single-job one
+        assert listed[0]["con_ids"] == JOB_REQUEST["con_ids"]
 
         chunks = client.get(f"/api/jobs/{job['id']}/chunks").json()
         assert chunks["total"] == 2

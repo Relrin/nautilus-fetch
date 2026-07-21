@@ -118,7 +118,11 @@ def _iso(ns: int | None) -> str | None:
     return datetime.fromtimestamp(ns / _NS, tz=UTC).isoformat()
 
 
-def job_dto(row: dict[str, Any], symbols: list[str] | None = None) -> dict[str, Any]:
+def job_dto(
+    row: dict[str, Any],
+    symbols: list[str] | None = None,
+    con_ids: list[int] | None = None,
+) -> dict[str, Any]:
     total = row["total_chunks"] or 0
     settled = row["done_chunks"] + row["empty_chunks"] + row["failed_chunks"]
     return {
@@ -128,6 +132,9 @@ def job_dto(row: dict[str, Any], symbols: list[str] | None = None) -> dict[str, 
         "data_type": row["data_type"],
         "schedule_id": row["schedule_id"],
         "symbols": symbols if symbols is not None else [],
+        # Instrument ids are for display; con_ids are what re-running a job
+        # actually needs, and they cannot be derived from the strings.
+        "con_ids": con_ids if con_ids is not None else [],
         "params": json.loads(row["params_json"] or "{}"),
         "workers": row["workers"],
         "max_retries": row["max_retries"],

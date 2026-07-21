@@ -108,5 +108,9 @@ async def run_now(request: Request, schedule_id: str) -> dict:
     if job is None:
         return {"job": None, "detail": "already up to date"}
     symbols = await jobs_repo.symbols_of(request.app.state.db, job["id"])
-    dto = job_dto(job, [symbol["instrument_id"] for symbol in symbols])
+    dto = job_dto(
+        job,
+        [symbol["instrument_id"] for symbol in symbols],
+        [symbol["con_id"] for symbol in symbols],
+    )
     return {"job": dto, "detail": "job created"}

@@ -6,6 +6,8 @@
  * the server check — it stays authoritative — but to stop the form offering
  * combinations the server will certainly reject.
  */
+import cronstrue from 'cronstrue'
+
 import type { BarSize, DataType, WhatToShow } from '@/api/enums'
 import type { CaptureWindowDto, JobCreateBody, ScheduleCreateBody } from '@/api/types'
 import {
@@ -209,6 +211,20 @@ export function buildJobBody(state: JobFormState, name?: string): JobCreateBody 
   }
 
   return body
+}
+
+/**
+ * Plain-English cron, or an explicit "not valid".
+ *
+ * cronstrue throws only with `throwExceptionOnParseError`; without it, garbage
+ * comes back as a confident-sounding sentence.
+ */
+export function humanCron(expression: string): string {
+  try {
+    return cronstrue.toString(expression, { verbose: false, throwExceptionOnParseError: true })
+  } catch {
+    return 'not a valid cron expression'
+  }
 }
 
 /** `nightly HH:MM` becomes `M H * * *`; `cron` is passed through verbatim. */

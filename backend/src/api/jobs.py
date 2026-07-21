@@ -25,7 +25,11 @@ def _engine(request: Request):
 async def _dto(request: Request, row: dict) -> dict:
     """job_dto with its instrument list attached — the UI titles cards on it."""
     symbols = await jobs_repo.symbols_of(request.app.state.db, row["id"])
-    return job_dto(row, [symbol["instrument_id"] for symbol in symbols])
+    return job_dto(
+        row,
+        [symbol["instrument_id"] for symbol in symbols],
+        [symbol["con_id"] for symbol in symbols],
+    )
 
 
 @router.post("", status_code=201)
@@ -67,7 +71,14 @@ async def list_jobs(
 ) -> list[dict]:
     rows = await jobs_repo.list_jobs(request.app.state.db, state=state, limit=limit, offset=offset)
     symbols = await jobs_repo.symbols_for(request.app.state.db, [row["id"] for row in rows])
-    return [job_dto(row, symbols.get(row["id"], [])) for row in rows]
+    return [
+        job_dto(
+            row,
+            [symbol["instrument_id"] for symbol in symbols.get(row["id"], [])],
+            [symbol["con_id"] for symbol in symbols.get(row["id"], [])],
+        )
+        for row in rows
+    ]
 
 
 async def _job_or_404(request: Request, job_id: str) -> dict:

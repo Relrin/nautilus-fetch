@@ -12,6 +12,7 @@ const job = (overrides: Partial<JobDto> = {}): JobDto => ({
   data_type: 'BARS',
   schedule_id: null,
   symbols: ['AAPL.NASDAQ'],
+  con_ids: [265598],
   params: { bar_size: '1 min' },
   workers: 4,
   max_retries: 3,
