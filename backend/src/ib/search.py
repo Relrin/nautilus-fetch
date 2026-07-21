@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -18,6 +19,45 @@ from nautilus_fetch.ib.shim import derive_instrument_id
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT_S = 15.0
+_FOREX_EXCHANGE = "IDEALPRO"
+
+# ISO 4217 codes IB quotes forex against. Used to recognize currency-pair
+# queries; anything outside this set is treated as a normal symbol search.
+_CURRENCIES = frozenset(
+    {
+        "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "CNH", "HKD",
+        "SGD", "SEK", "NOK", "DKK", "MXN", "ZAR", "PLN", "CZK", "HUF", "TRY",
+        "ILS", "KRW", "RUB", "INR", "CNY", "THB", "AED", "SAR",
+    }
+)
+
+_FOREX_SEPARATOR = re.compile(r"[./\-\s_]+")
+
+
+def parse_forex_query(query: str) -> tuple[str, str | None] | None:
+    """Detect a currency-pair query, returning (base, quote|None), or None.
+
+    Accepts separated pairs ('EUR.USD', 'EUR/USD', 'EUR-USD'), concatenated
+    pairs ('EURUSD'), and a bare base currency ('EUR' -> every EUR pair).
+    Only recognized ISO 4217 codes qualify, so ordinary stock tickers that
+    happen to be 3 or 6 letters are left to the normal symbol search.
+    """
+    raw = query.strip().upper()
+    if not raw:
+        return None
+    parts = [part for part in _FOREX_SEPARATOR.split(raw) if part]
+    if len(parts) == 2:
+        base, quote = parts
+        if base in _CURRENCIES and quote in _CURRENCIES:
+            return base, quote
+        return None
+    if len(parts) == 1:
+        token = parts[0]
+        if len(token) == 6 and token[:3] in _CURRENCIES and token[3:] in _CURRENCIES:
+            return token[:3], token[3:]
+        if len(token) == 3 and token in _CURRENCIES:
+            return token, None
+    return None
 
 
 class IBUnavailableError(RuntimeError):
@@ -69,6 +109,32 @@ class InstrumentSearchService:
 
     async def search(self, query: str, sec_type: str | None = None) -> list[dict[str, Any]]:
         self._require_connection()
+        results: list[dict[str, Any]] = []
+        seen: set[int] = set()
+
+        # IB's reqMatchingSymbols only returns stock-type matches; forex pairs
+        # (secType CASH on IDEALPRO) never appear there and must be resolved via
+        # contract details instead.
+        forex = parse_forex_query(query)
+        if forex is not None and sec_type in (None, "CASH"):
+            for row in await self._search_forex(*forex):
+                if row["con_id"] not in seen:
+                    seen.add(row["con_id"])
+                    results.append(row)
+
+        # Skip the stock search for an explicit pair query (e.g. "EUR.USD"):
+        # reqMatchingSymbols would only add noise. A bare currency ("EUR") is
+        # ambiguous, so still run it — the base may also be a ticker.
+        explicit_pair = forex is not None and forex[1] is not None
+        if sec_type != "CASH" and not (explicit_pair and sec_type is None):
+            for row in await self._search_symbols(query, sec_type):
+                if row["con_id"] not in seen:
+                    seen.add(row["con_id"])
+                    results.append(row)
+
+        return results
+
+    async def _search_symbols(self, query: str, sec_type: str | None) -> list[dict[str, Any]]:
         await self._search_limiter.acquire()
         descriptions = await asyncio.wait_for(
             self._conn.ib.reqMatchingSymbolsAsync(query),
@@ -89,6 +155,43 @@ class InstrumentSearchService:
                     "currency": contract.currency or None,
                     "description": contract.description or None,
                     "derivative_sec_types": derivative_sec_types,
+                }
+            )
+        return results
+
+    async def _search_forex(self, base: str, quote: str | None) -> list[dict[str, Any]]:
+        """Resolve currency pairs through an underspecified CASH contract.
+
+        With only symbol+exchange, IB returns every pair based on `base`;
+        adding `currency` narrows it to the single requested pair.
+        """
+        from ib_async import Contract
+
+        contract = Contract(secType="CASH", symbol=base, exchange=_FOREX_EXCHANGE)
+        if quote is not None:
+            contract.currency = quote
+        await self._search_limiter.acquire()
+        try:
+            details_list = await asyncio.wait_for(
+                self._conn.ib.reqContractDetailsAsync(contract),
+                timeout=_REQUEST_TIMEOUT_S,
+            )
+        except Exception as exc:  # "no security definition" etc. -> no matches
+            logger.info("Forex lookup for %s%s failed: %s", base, quote or "", exc)
+            return []
+
+        results = []
+        for details in details_list or []:
+            contract = details.contract
+            results.append(
+                {
+                    "con_id": contract.conId,
+                    "symbol": contract.symbol,
+                    "sec_type": contract.secType,
+                    "primary_exchange": contract.primaryExchange or None,
+                    "currency": contract.currency or None,
+                    "description": details.longName or f"{contract.symbol}.{contract.currency}",
+                    "derivative_sec_types": [],
                 }
             )
         return results

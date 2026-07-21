@@ -10,8 +10,16 @@ from nautilus_fetch.ib.search import (
     InstrumentNotFoundError,
     InstrumentSearchService,
     MinIntervalLimiter,
+    parse_forex_query,
 )
-from tests.fake_ib import FakeConn, FakeIB, aapl_details, eurusd_details
+from tests.fake_ib import (
+    FakeConn,
+    FakeIB,
+    aapl_details,
+    eurgbp_details,
+    eurusd_details,
+    gbpusd_details,
+)
 
 
 @pytest.fixture
@@ -27,7 +35,11 @@ async def db(tmp_path):
 def fake_ib() -> FakeIB:
     ib = FakeIB()
     ib.add_details(aapl_details())
-    ib.add_details(eurusd_details())
+    # forex pairs are NOT returned by reqMatchingSymbols: register them as IB
+    # actually behaves, resolvable only through contract details
+    ib.add_details(eurusd_details(), matchable=False)
+    ib.add_details(gbpusd_details(), matchable=False)
+    ib.add_details(eurgbp_details(), matchable=False)
     return ib
 
 
@@ -98,6 +110,65 @@ async def test_forex_details_instrument_id(fake_ib, db):
     service = make_service(fake_ib, db)
     row = await service.details(12087792)
     assert row["instrument_id"] == "EUR/USD.IDEALPRO"
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("EUR.USD", ("EUR", "USD")),
+        ("eur/usd", ("EUR", "USD")),
+        ("EUR-USD", ("EUR", "USD")),
+        ("EURUSD", ("EUR", "USD")),
+        ("EUR USD", ("EUR", "USD")),
+        ("EUR", ("EUR", None)),
+        ("AAPL", None),  # not a currency
+        ("GOOGL", None),  # 5 letters
+        ("ABCDEF", None),  # 6 letters, not currencies
+        ("XYZ.USD", None),  # base not a currency
+        ("", None),
+    ],
+)
+def test_parse_forex_query(query, expected):
+    assert parse_forex_query(query) == expected
+
+
+async def test_search_explicit_forex_pair_skips_stock_search(fake_ib, db):
+    service = make_service(fake_ib, db)
+    results = await service.search("EUR.USD")
+    assert [row["con_id"] for row in results] == [12087792]
+    assert results[0]["sec_type"] == "CASH"
+    assert results[0]["currency"] == "USD"
+    # an explicit pair is unambiguously forex: no wasted symbol search
+    assert fake_ib.calls["reqMatchingSymbols"] == 0
+
+
+async def test_search_concatenated_forex_pair(fake_ib, db):
+    service = make_service(fake_ib, db)
+    results = await service.search("gbpusd")
+    assert [row["con_id"] for row in results] == [12087797]
+
+
+async def test_search_bare_currency_returns_all_pairs_and_runs_stock_search(fake_ib, db):
+    service = make_service(fake_ib, db)
+    results = await service.search("EUR")
+    con_ids = {row["con_id"] for row in results}
+    assert con_ids == {12087792, 12087801}  # EUR.USD and EUR.GBP
+    # a bare currency is ambiguous, so the stock search still runs
+    assert fake_ib.calls["reqMatchingSymbols"] == 1
+
+
+async def test_search_cash_sec_type_only_forex(fake_ib, db):
+    service = make_service(fake_ib, db)
+    results = await service.search("EUR", sec_type="CASH")
+    assert {row["con_id"] for row in results} == {12087792, 12087801}
+    assert fake_ib.calls["reqMatchingSymbols"] == 0
+
+
+async def test_search_non_currency_does_not_hit_forex_path(fake_ib, db):
+    service = make_service(fake_ib, db)
+    await service.search("AAPL")
+    assert fake_ib.calls["reqContractDetails"] == 0  # no forex CASH lookup
+    assert fake_ib.calls["reqMatchingSymbols"] == 1
 
 
 async def test_min_interval_limiter_spaces_calls():

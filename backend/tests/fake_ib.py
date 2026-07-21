@@ -69,6 +69,50 @@ def eurusd_details() -> ContractDetails:
     )
 
 
+def gbpusd_details() -> ContractDetails:
+    return ContractDetails(
+        contract=Contract(
+            secType="CASH",
+            conId=12087797,
+            symbol="GBP",
+            exchange="IDEALPRO",
+            currency="USD",
+            localSymbol="GBP.USD",
+            tradingClass="GBP.USD",
+        ),
+        marketName="GBP.USD",
+        minTick=5e-05,
+        priceMagnifier=1,
+        longName="British Pound Sterling",
+        minSize=1.0,
+        sizeIncrement=1.0,
+        timeZoneId="UTC",
+        validExchanges="IDEALPRO",
+    )
+
+
+def eurgbp_details() -> ContractDetails:
+    return ContractDetails(
+        contract=Contract(
+            secType="CASH",
+            conId=12087801,
+            symbol="EUR",
+            exchange="IDEALPRO",
+            currency="GBP",
+            localSymbol="EUR.GBP",
+            tradingClass="EUR.GBP",
+        ),
+        marketName="EUR.GBP",
+        minTick=5e-05,
+        priceMagnifier=1,
+        longName="European Monetary Union Euro",
+        minSize=1.0,
+        sizeIncrement=1.0,
+        timeZoneId="UTC",
+        validExchanges="IDEALPRO",
+    )
+
+
 def msft_details() -> ContractDetails:
     return ContractDetails(
         contract=Contract(
@@ -113,10 +157,13 @@ class FakeIB:
         self.depth_tickers: dict[int, FakeTicker] = {}
         self.active_depth: set[int] = set()
 
-    def add_details(self, details: ContractDetails) -> None:
+    def add_details(self, details: ContractDetails, *, matchable: bool = True) -> None:
         self.details[details.contract.conId] = [details]
-        description = ContractDescription(contract=details.contract, derivativeSecTypes=[])
-        self.matching.setdefault(details.contract.symbol, []).append(description)
+        # matchable=False models instruments IB does NOT return from
+        # reqMatchingSymbols (forex pairs) but which resolve via contract details
+        if matchable:
+            description = ContractDescription(contract=details.contract, derivativeSecTypes=[])
+            self.matching.setdefault(details.contract.symbol, []).append(description)
 
     async def reqMatchingSymbolsAsync(self, pattern: str):
         self.calls["reqMatchingSymbols"] += 1
@@ -129,7 +176,24 @@ class FakeIB:
 
     async def reqContractDetailsAsync(self, contract: Contract):
         self.calls["reqContractDetails"] += 1
-        return list(self.details.get(contract.conId, []))
+        if contract.conId:
+            return list(self.details.get(contract.conId, []))
+        # underspecified lookup (e.g. forex CASH symbol/currency/exchange):
+        # return every registered contract matching the provided fields
+        matches = []
+        for details_list in self.details.values():
+            for details in details_list:
+                candidate = details.contract
+                if contract.secType and candidate.secType != contract.secType:
+                    continue
+                if contract.symbol and candidate.symbol != contract.symbol:
+                    continue
+                if contract.currency and candidate.currency != contract.currency:
+                    continue
+                if contract.exchange and candidate.exchange != contract.exchange:
+                    continue
+                matches.append(details)
+        return matches
 
     def add_fault(self, con_id: int, exc: Exception) -> None:
         self.faults.setdefault(con_id, []).append(exc)
