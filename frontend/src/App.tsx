@@ -1,4 +1,5 @@
 import { ToastHost } from '@/components/ndm/ToastHost'
+import { InspectorAside } from '@/features/inspector/InspectorAside'
 import { InstrumentsAside } from '@/features/instruments/InstrumentsAside'
 import { QueuePane } from '@/features/queue/QueuePane'
 import { TopBar } from '@/features/topbar/TopBar'
@@ -42,8 +43,7 @@ function QueuePage() {
     <div className="grid min-h-0 grid-cols-[292px_minmax(0,1fr)_344px]">
       <InstrumentsAside onQueueJob={notYet} />
       <QueuePane onNewJob={notYet} />
-      {/* Phase 5 fills this with the inspector. */}
-      <aside className="border-b1 bg-bar flex min-h-0 flex-col border-l" />
+      <InspectorAside />
     </div>
   )
 }

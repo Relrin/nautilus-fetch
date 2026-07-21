@@ -1,0 +1,66 @@
+import type { JobDto } from '@/api/types'
+import { NdmBadge } from '@/components/ndm/Badge'
+import { Chip } from '@/components/ndm/Chip'
+import { isRecorder, jobBadge, jobTimes, jobTitle } from '@/domain/jobView'
+import { kindLabel } from '@/domain/kind'
+import { fmtDate, fmtDateTime } from '@/lib/format'
+
+/** Title, status badge, range line and the job's configuration chips. */
+export function InspectorIdentity({ job }: { job: JobDto }) {
+  const badge = jobBadge(job)
+  const times = jobTimes(job)
+  const recorder = isRecorder(job)
+
+  return (
+    <section>
+      <div className="flex items-start gap-[8px]">
+        <span className="text-14 text-t1 min-w-0 flex-1 font-mono leading-[1.35] font-semibold break-words">
+          {jobTitle(job)}
+        </span>
+        <NdmBadge label={badge.label} className={badge.className} />
+      </div>
+
+      <div className="text-t2 text-105 mt-[6px] font-mono">
+        {recorder
+          ? // A recorder has no end: `range_end` is null and stays null.
+            `capturing since ${fmtDateTime(times.startedAt ?? times.rangeStart)}`
+          : `${fmtDate(times.rangeStart)} → ${fmtDate(times.rangeEnd)}`}
+      </div>
+
+      <div className="mt-[9px] flex flex-wrap gap-[5px]">
+        <Chip tone="config">{kindLabel(job.data_type, job.params.bar_size)}</Chip>
+        {job.params.what_to_show && <Chip tone="config">{job.params.what_to_show}</Chip>}
+        {recorder && job.params.depth_levels !== undefined && (
+          <Chip tone="config" title="Order book levels per side">
+            {`${job.params.depth_levels} levels`}
+          </Chip>
+        )}
+        {recorder && job.params.snapshot_interval_ms !== undefined && (
+          <Chip tone="config" title="Snapshot interval">
+            {`${job.params.snapshot_interval_ms} ms`}
+          </Chip>
+        )}
+        {job.params.use_rth !== undefined && (
+          <Chip
+            tone="config"
+            title={
+              job.params.use_rth
+                ? 'Regular trading hours only'
+                : 'Includes extended / overnight sessions'
+            }
+          >
+            {job.params.use_rth ? 'RTH only' : 'all hours'}
+          </Chip>
+        )}
+        {/* Recorders run a single subscription per instrument — a worker count
+            would be meaningless, and retries do not apply to a live stream. */}
+        {!recorder && (
+          <>
+            <Chip tone="config" title="Parallel workers">{`${job.workers}w`}</Chip>
+            <Chip tone="config" title="Max retries per chunk">{`${job.max_retries}r`}</Chip>
+          </>
+        )}
+      </div>
+    </section>
+  )
+}

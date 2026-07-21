@@ -26,6 +26,27 @@ describe('ChunkBuffer.fold', () => {
     cells[5_000] = [5_000, CHUNK_CODE.failed]
     const folded = ChunkBuffer.fromDto(dto(10_000, cells)).fold()
     expect(folded.filter((cell) => cell === 'failed')).toHaveLength(1)
+    // ...and every OTHER cell reports the success it actually holds. The
+    // bucket seed used to be 0, which is `pending` and outranks `done`, so a
+    // wholly-completed bucket kept its seed and the map drew a finished job as
+    // untouched. Asserting only the failure count let that pass.
+    expect(folded.filter((cell) => cell === 'done')).toHaveLength(95)
+  })
+
+  it('folds a partially-run job into done, active and pending regions', () => {
+    // 8,024 of 12,480 settled with 4 in flight — the shape of a live job.
+    const cells: [number, number][] = []
+    for (let i = 0; i < 8_024; i += 1) cells.push([i, CHUNK_CODE.done])
+    for (let i = 8_024; i < 8_028; i += 1) cells.push([i, CHUNK_CODE.active])
+    const folded = ChunkBuffer.fromDto(dto(12_480, cells)).fold()
+
+    expect(folded).toHaveLength(96)
+    expect(folded.filter((cell) => cell === 'done').length).toBeGreaterThan(55)
+    expect(folded).toContain('active')
+    expect(folded).toContain('pending')
+    // The trailing third has genuinely not started.
+    expect(folded.at(-1)).toBe('pending')
+    expect(folded.at(0)).toBe('done')
   })
 
   it('ranks failed over active over pending over done within a bucket', () => {

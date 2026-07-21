@@ -27,6 +27,12 @@ const RANK: Record<number, number> = {
   [CHUNK_CODE.empty]: 1,
 }
 
+/**
+ * "No chunk has landed in this bucket yet", distinct from every wire code.
+ * It must NOT be 0 — that is `pending`, a real state with a real rank.
+ */
+const UNSET = 255
+
 /** What a folded cell renders as. `empty` is deliberately absent — it folds to `done`. */
 export type CellState = 'pending' | 'active' | 'done' | 'failed'
 
@@ -132,11 +138,15 @@ export class ChunkBuffer {
       )
     }
 
-    const winners = new Uint8Array(buckets)
+    // UNSET, not 0: zero is `pending`, which outranks `done`. Seeding the
+    // buckets with it would mean a bucket whose chunks all succeeded could
+    // never beat its own initial value, and a job at 64% would draw a chunk
+    // map that looks untouched.
+    const winners = new Uint8Array(buckets).fill(UNSET)
     for (let i = 0; i < this.total; i += 1) {
       const bucket = Math.floor((i * buckets) / this.total)
       const code = this.cells[i] ?? 0
-      const current = winners[bucket] ?? 0
+      const current = winners[bucket] ?? UNSET
       if ((RANK[code] ?? 0) > (RANK[current] ?? 0)) winners[bucket] = code
     }
     return Array.from(winners, (code) => CELL_OF_CODE[code] ?? 'pending')
