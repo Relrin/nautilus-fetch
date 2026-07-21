@@ -5,6 +5,7 @@ import type { JobDto } from '@/api/types'
 import { ToastHost } from '@/components/ndm/ToastHost'
 import { jobConIds } from '@/domain/jobView'
 import { isBarSize } from '@/domain/kind'
+import { CatalogPane } from '@/features/catalog/CatalogPane'
 import { InspectorAside } from '@/features/inspector/InspectorAside'
 import { InstrumentsAside } from '@/features/instruments/InstrumentsAside'
 import { NewJobModal, type NewJobPrefill } from '@/features/newjob/NewJobModal'
@@ -35,7 +36,7 @@ function Shell() {
         <TopBar />
         {page === 'queue' && <QueuePage />}
         {page === 'schedules' && <SchedulesPane />}
-        {page === 'catalog' && <CatalogPlaceholder />}
+        {page === 'catalog' && <CatalogPane />}
       </div>
       <ToastHost />
     </WsProvider>
@@ -94,16 +95,6 @@ function QueuePage() {
       <QueuePane onNewJob={openBlank} onRerun={openForRerun} />
       <InspectorAside />
       {modalOpen && <NewJobModal onClose={() => setModalOpen(false)} prefill={prefill} />}
-    </div>
-  )
-}
-
-function CatalogPlaceholder() {
-  return (
-    <div className="grid min-h-0 grid-cols-[292px_minmax(0,1fr)_344px]">
-      <aside className="border-b1 bg-bar flex min-h-0 flex-col border-r" />
-      <main className="bg-page flex min-h-0 flex-col" />
-      <aside className="border-b1 bg-bar flex min-h-0 flex-col border-l" />
     </div>
   )
 }
