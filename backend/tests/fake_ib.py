@@ -217,7 +217,13 @@ class FakeIB:
     ) -> list[BarData]:
         self.calls["reqHistoricalData"] += 1
         self.historical_calls.append(
-            {"con_id": contract.conId, "end": endDateTime, "duration": durationStr, "bar_size": barSizeSetting}
+            {
+                "con_id": contract.conId,
+                "end": endDateTime,
+                "duration": durationStr,
+                "bar_size": barSizeSetting,
+                "what_to_show": whatToShow,
+            }
         )
         if self.latency_s:
             await asyncio.sleep(self.latency_s)

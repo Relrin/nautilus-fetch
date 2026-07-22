@@ -113,7 +113,12 @@ def _what_to_show_for(spec_data_type: str, user_choice: str | None, sec_type: st
         return "TRADES"
     if spec_data_type == "QUOTE_TICKS":
         return "BID_ASK"
-    return user_choice or _default_what_to_show(sec_type)
+    resolved = user_choice or _default_what_to_show(sec_type)
+    # Spot forex (CASH) has no trade prints; IB rejects TRADES with Error 162
+    # ("No historical market data for ...@FXSUBPIP Last"). Fall back to MIDPOINT.
+    if sec_type == "CASH" and resolved == "TRADES":
+        return "MIDPOINT"
+    return resolved
 
 
 def _now_ms() -> int:
@@ -171,13 +176,24 @@ class JobEngine:
                 raise JobValidationError(str(exc)) from exc
 
         contexts: list[_InstrumentCtx] = []
+        coercion_warnings: list[str] = []
         for con_id in dict.fromkeys(spec.con_ids):  # dedupe, keep order
             row = await self._search.details(con_id)
+            if spec.data_type == "TRADE_TICKS" and row["sec_type"] == "CASH":
+                raise JobValidationError(
+                    f"{row['instrument_id']}: trade ticks are not available for forex "
+                    "(CASH); use quote ticks (QUOTE_TICKS) instead."
+                )
             try:
                 instrument = instrument_from_row(row)
             except InstrumentConversionError as exc:
                 raise JobValidationError(str(exc)) from exc
             what_to_show = _what_to_show_for(spec.data_type, spec.what_to_show, row["sec_type"])
+            if spec.data_type == "BARS" and row["sec_type"] == "CASH" and spec.what_to_show == "TRADES":
+                coercion_warnings.append(
+                    f"{row['instrument_id']}: forex has no trade data; "
+                    "using MIDPOINT bars instead of TRADES."
+                )
             contexts.append(
                 _InstrumentCtx(
                     con_id=con_id,
@@ -291,7 +307,7 @@ class JobEngine:
 
         job = await jobs_repo.get(self._db, job_id)
         await self._spawn(job)
-        return await jobs_repo.get(self._db, job_id), warnings
+        return await jobs_repo.get(self._db, job_id), coercion_warnings + warnings
 
     async def _submit_depth(
         self, spec: JobSpec, contexts: list[_InstrumentCtx]

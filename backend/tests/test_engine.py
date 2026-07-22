@@ -247,3 +247,38 @@ async def test_rerun_same_range_is_idempotent(env):
 async def test_submit_rejects_unknown_bar_size(env):
     with pytest.raises(JobValidationError):
         await env.engine.submit(make_spec(bar_size="7 mins"))
+
+
+EURUSD_CON_ID = 12087792  # eurusd_details(): secType CASH, EUR/USD.IDEALPRO
+
+
+def test_what_to_show_coerces_forex_trades_to_midpoint():
+    from nautilus_fetch.engine.engine import _what_to_show_for
+
+    # Spot forex (CASH) has no trade prints: TRADES must become MIDPOINT.
+    assert _what_to_show_for("BARS", "TRADES", "CASH") == "MIDPOINT"
+    # A CASH instrument with no explicit choice already defaults to MIDPOINT.
+    assert _what_to_show_for("BARS", None, "CASH") == "MIDPOINT"
+    # Explicit quote choices for forex are left untouched.
+    assert _what_to_show_for("BARS", "BID", "CASH") == "BID"
+    assert _what_to_show_for("BARS", "ASK", "CASH") == "ASK"
+    # Stocks are unaffected.
+    assert _what_to_show_for("BARS", "TRADES", "STK") == "TRADES"
+    assert _what_to_show_for("BARS", None, "STK") == "TRADES"
+
+
+async def test_forex_bars_trades_request_uses_midpoint(env):
+    job, warnings = await env.engine.submit(
+        make_spec(con_ids=[EURUSD_CON_ID], what_to_show="TRADES")
+    )
+    assert any("EUR/USD.IDEALPRO" in w and "MIDPOINT" in w for w in warnings), warnings
+    final = await wait_terminal(env.db, job["id"])
+    assert final["state"] == "completed"
+    # Every historical request for the forex pair asked IB for MIDPOINT, not TRADES.
+    assert env.fake.historical_calls
+    assert all(call["what_to_show"] == "MIDPOINT" for call in env.fake.historical_calls)
+
+
+async def test_forex_trade_ticks_rejected(env):
+    with pytest.raises(JobValidationError, match="trade ticks are not available for forex"):
+        await env.engine.submit(make_spec(con_ids=[EURUSD_CON_ID], data_type="TRADE_TICKS"))
