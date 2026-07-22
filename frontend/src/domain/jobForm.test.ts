@@ -4,7 +4,9 @@ import {
   buildJobBody,
   buildScheduleBody,
   cronFor,
+  hasForexTradeTicks,
   initialJobForm,
+  resolveWhatToShow,
   validateJobForm,
   type JobFormState,
 } from './jobForm'
@@ -91,6 +93,38 @@ describe('buildJobBody', () => {
     expect('capture_window' in off).toBe(false)
     const on = buildJobBody(form({ dataType: 'DEPTH', captureWindowEnabled: true }))
     expect(on.capture_window?.days).toEqual([0, 1, 2, 3, 4])
+  })
+})
+
+describe('resolveWhatToShow', () => {
+  it('coerces TRADES to MIDPOINT only for a fully-forex selection', () => {
+    expect(resolveWhatToShow('TRADES', ['FX'])).toBe('MIDPOINT')
+    expect(resolveWhatToShow('TRADES', ['FX', 'FX'])).toBe('MIDPOINT')
+  })
+
+  it('keeps TRADES for stock-only and mixed selections (backend coerces FX legs)', () => {
+    expect(resolveWhatToShow('TRADES', ['STOCK'])).toBe('TRADES')
+    expect(resolveWhatToShow('TRADES', ['FX', 'STOCK'])).toBe('TRADES')
+    // Unknown class (rerun/prefill without lookup) is treated as non-forex.
+    expect(resolveWhatToShow('TRADES', ['FX', undefined])).toBe('TRADES')
+    expect(resolveWhatToShow('TRADES', [])).toBe('TRADES')
+  })
+
+  it('never overrides an explicit BID/ASK/MIDPOINT choice, even for forex', () => {
+    expect(resolveWhatToShow('BID', ['FX'])).toBe('BID')
+    expect(resolveWhatToShow('ASK', ['FX'])).toBe('ASK')
+    expect(resolveWhatToShow('MIDPOINT', ['FX'])).toBe('MIDPOINT')
+  })
+})
+
+describe('hasForexTradeTicks', () => {
+  it('flags trade ticks on any forex leg, and nothing else', () => {
+    expect(hasForexTradeTicks('TRADE_TICKS', ['FX'])).toBe(true)
+    expect(hasForexTradeTicks('TRADE_TICKS', ['STOCK', 'FX'])).toBe(true)
+    expect(hasForexTradeTicks('TRADE_TICKS', ['STOCK'])).toBe(false)
+    // Forex quotes and bars are fine — only trade ticks are unavailable.
+    expect(hasForexTradeTicks('QUOTE_TICKS', ['FX'])).toBe(false)
+    expect(hasForexTradeTicks('BARS', ['FX'])).toBe(false)
   })
 })
 

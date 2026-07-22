@@ -8,7 +8,13 @@ import type { ScheduleCreateBody, ScheduleDto } from '@/api/types'
 import { Stepper } from '@/components/ndm/Stepper'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
-import { humanCron } from '@/domain/jobForm'
+import {
+  FOREX_BARS_NOTE,
+  FOREX_NO_TRADE_TICKS,
+  hasForexTradeTicks,
+  humanCron,
+  resolveWhatToShow,
+} from '@/domain/jobForm'
 import { kindLabel } from '@/domain/kind'
 import { MAX_RETRIES, MAX_WORKERS } from '@/lib/constants'
 import { Field, TextInput } from '@/features/newjob/Field'
@@ -56,6 +62,9 @@ export function ScheduleEditorModal({ schedule, picked, onClose }: ScheduleEdito
   const { push } = useToasts()
   const pending = create.isPending || update.isPending
 
+  // Asset classes of the current picks drive the forex-aware defaults below.
+  const classes = useMemo(() => instruments.map((row) => row.cls), [instruments])
+  const forexBars = dataType === 'BARS' && classes.some((cls) => cls === 'FX')
   const errors = useMemo(() => {
     const found: string[] = []
     if (name.trim().length === 0) found.push('Name is required.')
@@ -65,8 +74,9 @@ export function ScheduleEditorModal({ schedule, picked, onClose }: ScheduleEdito
       found.push('Cron needs all five fields, e.g. `30 2 * * 1-5`.')
     }
     if (dataType === 'BARS' && !barSize) found.push('Bar size is required for bar schedules.')
+    if (hasForexTradeTicks(dataType, classes)) found.push(FOREX_NO_TRADE_TICKS)
     return found
-  }, [name, instruments, cron, dataType, barSize])
+  }, [name, instruments, cron, dataType, barSize, classes])
 
   const submit = () => {
     setSubmitted(true)
@@ -81,7 +91,7 @@ export function ScheduleEditorModal({ schedule, picked, onClose }: ScheduleEdito
         con_ids: instruments.map((row) => row.conId),
         data_type: dataType,
         bar_size: dataType === 'BARS' ? barSize : null,
-        what_to_show: dataType === 'BARS' ? 'TRADES' : null,
+        what_to_show: dataType === 'BARS' ? resolveWhatToShow('TRADES', classes) : null,
         use_rth: true,
         workers,
         max_retries: retries,
@@ -213,6 +223,8 @@ export function ScheduleEditorModal({ schedule, picked, onClose }: ScheduleEdito
           <div className="text-105 text-t2 mt-[-7px] font-mono">
             {`↳ ${humanCron(cron)} · no L2 depth (recorders run continuously)`}
           </div>
+
+          {forexBars && <div className="text-95 text-t3 mt-[-7px]">{FOREX_BARS_NOTE}</div>}
 
           <div className="flex flex-wrap items-center gap-[22px]">
             <label className="flex cursor-pointer items-center gap-[8px]">

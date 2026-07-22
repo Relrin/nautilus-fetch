@@ -9,7 +9,11 @@ import { Button } from '@/components/ui/button'
 import {
   buildJobBody,
   buildScheduleBody,
+  FOREX_BARS_NOTE,
+  FOREX_NO_TRADE_TICKS,
+  hasForexTradeTicks,
   initialJobForm,
+  resolveWhatToShow,
   validateJobForm,
   type JobFormState,
 } from '@/domain/jobForm'
@@ -68,7 +72,15 @@ export function NewJobModal({ onClose, prefill }: NewJobModalProps) {
     patch({ conIds: next.map((row) => row.conId) })
   }
 
-  const errors = useMemo(() => validateJobForm(form), [form])
+  // Asset classes of the current picks drive the forex-aware defaults below.
+  const classes = useMemo(() => picked.map((row) => row.cls), [picked])
+  const forexBars = form.dataType === 'BARS' && classes.some((cls) => cls === 'FX')
+  const errors = useMemo(() => {
+    const base = validateJobForm(form)
+    return hasForexTradeTicks(form.dataType, classes)
+      ? [...base, { field: 'dataType', message: FOREX_NO_TRADE_TICKS }]
+      : base
+  }, [form, classes])
   const recorder = form.dataType === 'DEPTH'
   const pending = createJob.isPending || createSchedule.isPending
 
@@ -85,8 +97,12 @@ export function NewJobModal({ onClose, prefill }: NewJobModalProps) {
     setSubmitted(true)
     if (errors.length > 0) return
 
+    // Forex has no trade prints; coerce a forex-only TRADES selection to MIDPOINT
+    // before building the body (the backend does the same, this keeps them honest).
+    const resolved = { ...form, whatToShow: resolveWhatToShow(form.whatToShow, classes) }
+
     if (form.cadence === 'once') {
-      createJob.mutate(buildJobBody(form, jobName), {
+      createJob.mutate(buildJobBody(resolved, jobName), {
         onSuccess: (job: JobDto & { warnings: string[] }) => {
           push(`Queued ${jobName} · ${kindLabel(form.dataType, form.barSize)}`, 'success')
           // Planner clamp messages are the ONLY signal that the range actually
@@ -100,7 +116,7 @@ export function NewJobModal({ onClose, prefill }: NewJobModalProps) {
       return
     }
 
-    createSchedule.mutate(buildScheduleBody(form, jobName), {
+    createSchedule.mutate(buildScheduleBody(resolved, jobName), {
       onSuccess: () => {
         push(`Schedule created for ${jobName}`, 'success')
         onClose()
@@ -158,6 +174,8 @@ export function NewJobModal({ onClose, prefill }: NewJobModalProps) {
               </div>
             </Field>
           </div>
+
+          {forexBars && <div className="text-95 text-t3 mt-[-7px]">{FOREX_BARS_NOTE}</div>}
 
           {depthOverLimit && (
             <div className="text-105 mt-[-7px] text-[#e8a33d]">

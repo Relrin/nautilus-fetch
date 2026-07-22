@@ -10,6 +10,7 @@ import cronstrue from 'cronstrue'
 
 import type { BarSize, DataType, WhatToShow } from '@/api/enums'
 import type { CaptureWindowDto, JobCreateBody, ScheduleCreateBody } from '@/api/types'
+import { type InstrumentClass } from '@/domain/instrumentClass'
 import {
   MAX_CON_IDS,
   MAX_DEPTH_LEVELS,
@@ -170,6 +171,41 @@ export function validateJobForm(state: JobFormState): FieldError[] {
   }
 
   return errors
+}
+
+// -- forex awareness ---------------------------------------------------------
+
+/**
+ * Spot forex (FX / IB `CASH`) is quote-driven and has no trade prints, so IB
+ * rejects `whatToShow=TRADES` with Error 162. The two helpers below mirror the
+ * backend's own rules (`_what_to_show_for` and its TRADE_TICKS guard) so the
+ * form never builds a forex request the server will refuse.
+ */
+export const FOREX_NO_TRADE_TICKS =
+  'Forex (FX) has no trade ticks — use quotes (L1 bid/ask) instead.'
+export const FOREX_BARS_NOTE =
+  'Forex has no trade prints — its bars use quote data (MIDPOINT by default).'
+
+/**
+ * The effective bar `whatToShow`, coercing only TRADES → MIDPOINT and only when
+ * the whole selection is forex. A mixed stock+forex selection keeps TRADES (the
+ * backend coerces just the forex legs), and an explicit BID/ASK/MIDPOINT choice
+ * is always respected.
+ */
+export function resolveWhatToShow(
+  choice: WhatToShow,
+  classes: readonly (InstrumentClass | undefined)[],
+): WhatToShow {
+  const allForex = classes.length > 0 && classes.every((cls) => cls === 'FX')
+  return allForex && choice === 'TRADES' ? 'MIDPOINT' : choice
+}
+
+/** Whether the current selection asks for trade ticks on a forex instrument. */
+export function hasForexTradeTicks(
+  dataType: DataType,
+  classes: readonly (InstrumentClass | undefined)[],
+): boolean {
+  return dataType === 'TRADE_TICKS' && classes.some((cls) => cls === 'FX')
 }
 
 // -- payload builders --------------------------------------------------------

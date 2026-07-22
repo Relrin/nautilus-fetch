@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useRef, useState } from 'react'
 
-import { CLASS_COLOR } from '@/domain/instrumentClass'
+import { CLASS_COLOR, type InstrumentClass } from '@/domain/instrumentClass'
 import {
   useInstrumentSearch,
   type InstrumentRowView,
@@ -12,6 +12,8 @@ import { MAX_CON_IDS } from '@/lib/constants'
 export interface PickedInstrument {
   conId: number
   symbol: string
+  /** Asset class, when known at pick time — drives forex-aware form defaults. */
+  cls?: InstrumentClass | undefined
 }
 
 interface InstrumentMultiSelectProps {
@@ -38,7 +40,7 @@ export function InstrumentMultiSelect({ picked, onChange }: InstrumentMultiSelec
 
   const add = (row: InstrumentRowView) => {
     if (picked.length >= MAX_CON_IDS) return
-    onChange([...picked, { conId: row.conId, symbol: row.symbol }])
+    onChange([...picked, { conId: row.conId, symbol: row.symbol, cls: row.cls }])
     setQuery('')
   }
 

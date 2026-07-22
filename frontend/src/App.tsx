@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 import { useInstruments } from '@/api/queries'
 import type { JobDto } from '@/api/types'
 import { ToastHost } from '@/components/ndm/ToastHost'
+import { classifyInstrument } from '@/domain/instrumentClass'
 import { jobConIds } from '@/domain/jobView'
 import { isBarSize } from '@/domain/kind'
 import { CatalogPane } from '@/features/catalog/CatalogPane'
@@ -57,7 +58,13 @@ function QueuePage() {
     (conId: number) => {
       const match = instruments?.find((row) => row.con_id === conId)
       setPrefill({
-        picked: [{ conId, symbol: match?.symbol ?? String(conId) }],
+        picked: [
+          {
+            conId,
+            symbol: match?.symbol ?? String(conId),
+            cls: match ? classifyInstrument(match.sec_type) : undefined,
+          },
+        ],
         state: { conIds: [conId] },
       })
       setModalOpen(true)
@@ -65,29 +72,39 @@ function QueuePage() {
     [instruments],
   )
 
-  const openForRerun = useCallback((job: JobDto) => {
-    const conIds = jobConIds(job)
-    setPrefill({
-      picked: conIds.map((conId, index) => ({
-        conId,
-        // `symbols` are instrument ids like `AAPL.SMART`; the ticker is enough
-        // for a chip and the two arrays share job_symbols' ordinal ordering.
-        symbol: job.symbols[index]?.split('.')[0] ?? String(conId),
-      })),
-      state: {
-        conIds,
-        dataType: job.data_type,
-        barSize: job.params.bar_size && isBarSize(job.params.bar_size) ? job.params.bar_size : null,
-        ...(job.params.what_to_show ? { whatToShow: job.params.what_to_show } : {}),
-        ...(job.params.use_rth === undefined ? {} : { useRth: job.params.use_rth }),
-        workers: job.workers,
-        maxRetries: job.max_retries,
-        ...(job.range_start ? { from: job.range_start.slice(0, 10) } : {}),
-        ...(job.range_end ? { to: job.range_end.slice(0, 10) } : {}),
-      },
-    })
-    setModalOpen(true)
-  }, [])
+  const openForRerun = useCallback(
+    (job: JobDto) => {
+      const conIds = jobConIds(job)
+      setPrefill({
+        picked: conIds.map((conId, index) => {
+          const match = instruments?.find((row) => row.con_id === conId)
+          return {
+            conId,
+            // `symbols` are instrument ids like `AAPL.SMART`; the ticker is enough
+            // for a chip and the two arrays share job_symbols' ordinal ordering.
+            symbol: job.symbols[index]?.split('.')[0] ?? String(conId),
+            // Class comes from the cache when the instrument is known; forex
+            // reruns then default to MIDPOINT like a fresh pick.
+            cls: match ? classifyInstrument(match.sec_type) : undefined,
+          }
+        }),
+        state: {
+          conIds,
+          dataType: job.data_type,
+          barSize:
+            job.params.bar_size && isBarSize(job.params.bar_size) ? job.params.bar_size : null,
+          ...(job.params.what_to_show ? { whatToShow: job.params.what_to_show } : {}),
+          ...(job.params.use_rth === undefined ? {} : { useRth: job.params.use_rth }),
+          workers: job.workers,
+          maxRetries: job.max_retries,
+          ...(job.range_start ? { from: job.range_start.slice(0, 10) } : {}),
+          ...(job.range_end ? { to: job.range_end.slice(0, 10) } : {}),
+        },
+      })
+      setModalOpen(true)
+    },
+    [instruments],
+  )
 
   return (
     <div className="grid min-h-0 grid-cols-[292px_minmax(0,1fr)_344px]">

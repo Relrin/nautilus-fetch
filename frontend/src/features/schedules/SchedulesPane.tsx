@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ndm/EmptyState'
 import { SectionHeader, SectionTitle } from '@/components/ndm/SectionHeader'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/alert-dialog'
+import { classifyInstrument } from '@/domain/instrumentClass'
 import { scheduleJobs, symbolsForConIds } from '@/domain/scheduleView'
 import { useSelection } from '@/state/selectionContext'
 import { useToasts } from '@/state/toastsContext'
@@ -152,12 +153,16 @@ export function SchedulesPane() {
           schedule={editor.schedule}
           picked={
             editor.schedule
-              ? editor.schedule.template.con_ids.map((conId, index) => ({
-                  conId,
-                  symbol:
-                    symbolsForConIds(editor.schedule!.template.con_ids, instruments)[index] ??
-                    String(conId),
-                }))
+              ? editor.schedule.template.con_ids.map((conId, index) => {
+                  const match = instruments?.find((row) => row.con_id === conId)
+                  return {
+                    conId,
+                    symbol:
+                      symbolsForConIds(editor.schedule!.template.con_ids, instruments)[index] ??
+                      String(conId),
+                    cls: match ? classifyInstrument(match.sec_type) : undefined,
+                  }
+                })
               : []
           }
           onClose={() => setEditor(null)}
